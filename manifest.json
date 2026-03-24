@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Resume Tailor",
+  "version": "1.0.0",
+  "description": "Tailor your HTML resume to a job description using your OpenAI key; auto-download a tailored A4 PDF.",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "downloads",
+    "debugger",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": ["https://api.openai.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Resume Tailor",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
+}

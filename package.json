@@ -1,0 +1,17 @@
+{
+  "name": "resume-tailor",
+  "private": true,
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "docx": "^9.6.1",
+    "linkedom": "^0.18.12"
+  }
+}

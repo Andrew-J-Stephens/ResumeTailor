@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resume Tailor — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="header">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="header-text">
+          <h1 class="title">Resume Tailor</h1>
+          <p class="subtitle">OpenAI settings</p>
+        </div>
+      </header>
+
+      <section class="card" aria-labelledby="card-heading">
+        <h2 id="card-heading" class="card-title">Connect to OpenAI</h2>
+        <p class="hint">
+          Your key is stored only in this browser profile
+          (<code>chrome.storage.local</code>). Avoid sharing your screen while it is visible.
+        </p>
+
+        <div class="field">
+          <label class="field-label" for="api-key">API key</label>
+          <input
+            id="api-key"
+            class="field-input"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="sk-…"
+          />
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="model-select">Model</label>
+          <div class="select-wrap">
+            <select id="model-select" class="field-input field-select" aria-describedby="model-hint">
+              <option value="gpt-4o-mini">GPT-4o mini — fast, economical</option>
+              <option value="gpt-4o">GPT-4o — capable, multimodal</option>
+              <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              <option value="gpt-4">GPT-4</option>
+              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+              <option value="__custom__">Custom model ID…</option>
+            </select>
+          </div>
+          <p id="model-hint" class="field-hint">Same models you’d pick in ChatGPT’s model picker (API names).</p>
+        </div>
+
+        <div id="model-custom-wrap" class="field field-nested" hidden>
+          <label class="field-label" for="model-custom">Custom model ID</label>
+          <input
+            id="model-custom"
+            class="field-input"
+            type="text"
+            spellcheck="false"
+            placeholder="e.g. gpt-4o-2024-08-06"
+          />
+        </div>
+
+        <button id="save" class="btn-primary" type="button">Save</button>
+        <p id="status" class="status" role="status"></p>
+      </section>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

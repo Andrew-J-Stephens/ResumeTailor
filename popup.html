@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Resume Tailor</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="header">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="header-text">
+          <h1 class="title">Resume Tailor</h1>
+          <p class="subtitle">Tailor your HTML resume to the job</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <p class="hint">
+          Upload your resume as <strong>.html</strong>. The tailored resume is auto-downloaded as A4 PDF
+          (<strong>CompanyName-resume-YYYY-MM-DD.pdf</strong> when the employer is known), with a print preview fallback if needed. On a job posting, <strong>highlight only the job
+          description text</strong> (plain text is sent—no page HTML/CSS/JS), then run tailoring.
+        </p>
+
+        <label class="upload">
+          <span class="upload-label">Upload HTML</span>
+          <input
+            id="file"
+            type="file"
+            accept=".html,.htm,text/html,application/xhtml+xml"
+          />
+        </label>
+
+        <p id="current" class="current"></p>
+
+        <div class="actions">
+          <button id="tailor" class="btn-primary" type="button" disabled>Tailor from page selection</button>
+          <button id="clear" class="btn-secondary" type="button" disabled>Remove resume</button>
+        </div>
+
+        <p id="status" class="status" data-kind="info"></p>
+
+        <p class="footer">
+          <a id="open-options" class="link" href="#">OpenAI settings</a>
+        </p>
+      </section>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>
