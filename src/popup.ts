@@ -7,6 +7,7 @@ const statusEl = el('status');
 const fileInput = el('file') as HTMLInputElement;
 const currentEl = el('current');
 const tailorBtn = el('tailor') as HTMLButtonElement;
+const coverLetterBtn = el('cover-letter') as HTMLButtonElement;
 const clearBtn = el('clear') as HTMLButtonElement;
 const openOptions = el('open-options') as HTMLAnchorElement;
 
@@ -24,12 +25,14 @@ function renderCurrent(meta: StoredResume | undefined) {
   if (!meta) {
     currentEl.textContent = 'No resume uploaded yet.';
     tailorBtn.disabled = true;
+    coverLetterBtn.disabled = true;
     clearBtn.disabled = true;
     return;
   }
   const when = new Date(meta.uploadedAt).toLocaleString();
   currentEl.textContent = `${meta.fileName} (${meta.mimeType}) — uploaded ${when}`;
   tailorBtn.disabled = false;
+  coverLetterBtn.disabled = false;
   clearBtn.disabled = false;
 }
 
@@ -103,6 +106,47 @@ tailorBtn.addEventListener('click', async () => {
     setStatus('Calling OpenAI and preparing A4 PDF…');
     const result = await chrome.runtime.sendMessage({
       type: 'TAILOR',
+      jobDescription: text,
+    });
+    if (result?.ok) {
+      setStatus(`Downloaded: ${result.fileName}`, 'success');
+    } else {
+      setStatus(result?.error ?? 'Unknown error', 'error');
+    }
+  } catch (e) {
+    setStatus(e instanceof Error ? e.message : String(e), 'error');
+  }
+});
+
+coverLetterBtn.addEventListener('click', async () => {
+  setStatus('Reading selection from page…');
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      setStatus('No active tab.', 'error');
+      return;
+    }
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return '';
+        return sel.toString();
+      },
+    });
+    const text = normalizeJobDescriptionFromPage(
+      String(results[0]?.result ?? '')
+    );
+    if (!text) {
+      setStatus(
+        'Highlight the job description on the page, then click again.',
+        'error'
+      );
+      return;
+    }
+    setStatus('Generating cover letter and preparing A4 PDF…');
+    const result = await chrome.runtime.sendMessage({
+      type: 'TAILOR_COVER_LETTER',
       jobDescription: text,
     });
     if (result?.ok) {

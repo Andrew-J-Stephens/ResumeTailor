@@ -88,3 +88,21 @@ export function buildTailoredDownloadFilename(
     : `${base}-resume-${date}.${ext}`;
   return { html: stripped, fileName };
 }
+
+export function buildCoverLetterDownloadFilename(
+  resumeBaseName: string,
+  jobText: string,
+  extension: 'html' | 'docx' | 'pdf' = 'html'
+): string {
+  const companyPart = resolveCompanyForFilename(null, jobText);
+  const base =
+    resumeBaseName
+      .replace(/\.html?$/i, '')
+      .replace(/\.docx$/i, '')
+      .replace(/\.pdf$/i, '')
+      .trim() || 'resume';
+  const date = formatResumeDownloadDate();
+  return companyPart
+    ? `${companyPart}-cover-letter-${date}.${extension}`
+    : `${base}-cover-letter-${date}.${extension}`;
+}

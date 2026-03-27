@@ -1,7 +1,15 @@
-import { buildTailoredDownloadFilename } from './lib/companyFilename';
+import {
+  buildTailoredDownloadFilename,
+  buildCoverLetterDownloadFilename,
+} from './lib/companyFilename';
 import { getResumeBlob, deleteResume } from './lib/db';
 import { normalizeJobDescriptionFromPage } from './lib/jobSelection';
-import { tailorFullHtml, readSettings, assertReady } from './lib/openai';
+import {
+  tailorFullHtml,
+  readSettings,
+  assertReady,
+  generateCoverLetterHtml,
+} from './lib/openai';
 import type { StoredResume, TailorResult } from './lib/types';
 
 const MENU_ID = 'tailor-selection';
@@ -140,9 +148,9 @@ async function runTailor(jobDescription: string): Promise<TailorResult> {
       return { ok: false, error: 'No job description text was provided.' };
     }
 
-    const { apiKey, model } = await readSettings();
+    const settings = await readSettings();
     const meta = await getCurrentResumeMeta();
-    assertReady(meta, apiKey);
+    assertReady(meta, settings.apiKey);
 
     const blob = await getResumeBlob(meta!.id);
     if (!blob) {
@@ -155,8 +163,7 @@ async function runTailor(jobDescription: string): Promise<TailorResult> {
     }
 
     const tailoredHtml = await tailorFullHtml(
-      apiKey,
-      model,
+      settings,
       job,
       originalHtml,
       meta!.fileName
@@ -179,6 +186,49 @@ async function runTailor(jobDescription: string): Promise<TailorResult> {
       );
     }
 
+    return { ok: true, fileName };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
+}
+
+async function runCoverLetter(jobDescription: string): Promise<TailorResult> {
+  try {
+    const job = normalizeJobDescriptionFromPage(jobDescription);
+    if (!job) {
+      return { ok: false, error: 'No job description text was provided.' };
+    }
+
+    const settings = await readSettings();
+    const meta = await getCurrentResumeMeta();
+    assertReady(meta, settings.apiKey);
+
+    const blob = await getResumeBlob(meta!.id);
+    if (!blob) {
+      return { ok: false, error: 'Resume file missing from storage. Upload again.' };
+    }
+
+    const originalHtml = await blob.text();
+    if (!originalHtml.trim()) {
+      return { ok: false, error: 'Stored HTML resume is empty.' };
+    }
+
+    const coverLetterHtml = await generateCoverLetterHtml(
+      settings,
+      job,
+      originalHtml
+    );
+    const fileName = buildCoverLetterDownloadFilename(meta!.fileName, job, 'pdf');
+    try {
+      await downloadPdfFromHtmlViaCdp(coverLetterHtml, fileName);
+    } catch (e) {
+      await openPrintPreviewTab(coverLetterHtml, fileName);
+      console.warn(
+        'Resume Tailor: cover letter auto PDF failed, fell back to print preview.',
+        e instanceof Error ? e.message : String(e)
+      );
+    }
     return { ok: true, fileName };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -216,6 +266,18 @@ chrome.contextMenus.onClicked.addListener((info) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'TAILOR') {
     runTailor(String(message.jobDescription ?? ''))
+      .then(sendResponse)
+      .catch((e) =>
+        sendResponse({
+          ok: false,
+          error: e instanceof Error ? e.message : String(e),
+        } as TailorResult)
+      );
+    return true;
+  }
+
+  if (message?.type === 'TAILOR_COVER_LETTER') {
+    runCoverLetter(String(message.jobDescription ?? ''))
       .then(sendResponse)
       .catch((e) =>
         sendResponse({

@@ -124,6 +124,15 @@ body {
   color: var(--text-muted);
 }
 
+.field-hint a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.field-hint a:hover {
+  text-decoration: underline;
+}
+
 .field-input {
   display: block;
   width: 100%;

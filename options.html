@@ -12,16 +12,26 @@
         <div class="brand-mark" aria-hidden="true"></div>
         <div class="header-text">
           <h1 class="title">Resume Tailor</h1>
-          <p class="subtitle">OpenAI settings</p>
+          <p class="subtitle">AI configuration</p>
         </div>
       </header>
 
       <section class="card" aria-labelledby="card-heading">
-        <h2 id="card-heading" class="card-title">Connect to OpenAI</h2>
+        <h2 id="card-heading" class="card-title">AI Provider & Model</h2>
         <p class="hint">
-          Your key is stored only in this browser profile
-          (<code>chrome.storage.local</code>). Avoid sharing your screen while it is visible.
+          Choose your provider and model for resume + cover letter generation. Keys are stored only in this browser profile
+          (<code>chrome.storage.local</code>).
         </p>
+
+        <div class="field">
+          <label class="field-label" for="provider-select">Provider</label>
+          <div class="select-wrap">
+            <select id="provider-select" class="field-input field-select">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+            </select>
+          </div>
+        </div>
 
         <div class="field">
           <label class="field-label" for="api-key">API key</label>
@@ -31,23 +41,19 @@
             type="password"
             autocomplete="off"
             spellcheck="false"
-            placeholder="sk-…"
+            placeholder="sk-… or anthropic key…"
           />
+          <p id="api-key-help" class="field-hint"></p>
         </div>
 
         <div class="field">
           <label class="field-label" for="model-select">Model</label>
           <div class="select-wrap">
             <select id="model-select" class="field-input field-select" aria-describedby="model-hint">
-              <option value="gpt-4o-mini">GPT-4o mini — fast, economical</option>
-              <option value="gpt-4o">GPT-4o — capable, multimodal</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo</option>
-              <option value="gpt-4">GPT-4</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
               <option value="__custom__">Custom model ID…</option>
             </select>
           </div>
-          <p id="model-hint" class="field-hint">Same models you’d pick in ChatGPT’s model picker (API names).</p>
+          <p id="model-hint" class="field-hint"></p>
         </div>
 
         <div id="model-custom-wrap" class="field field-nested" hidden>
