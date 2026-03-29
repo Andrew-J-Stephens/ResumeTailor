@@ -133,6 +133,39 @@ body {
   text-decoration: underline;
 }
 
+.provider-logos {
+  display: flex;
+  gap: 10px;
+  margin: -4px 0 16px;
+}
+
+.provider-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+
+.provider-logo::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.provider-logo-openai::before {
+  background: linear-gradient(135deg, #10a37f 0%, #0d8f6e 100%);
+}
+
+.provider-logo-anthropic::before {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+}
+
 .field-input {
   display: block;
   width: 100%;

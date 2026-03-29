@@ -1,4 +1,4 @@
-import { saveResume } from './lib/db';
+import { saveResume, getResumeBlob } from './lib/db';
 import { normalizeJobDescriptionFromPage } from './lib/jobSelection';
 import type { StoredResume } from './lib/types';
 
@@ -6,6 +6,7 @@ const el = (id: string) => document.getElementById(id)!;
 const statusEl = el('status');
 const fileInput = el('file') as HTMLInputElement;
 const currentEl = el('current');
+const previewBtn = el('preview') as HTMLButtonElement;
 const tailorBtn = el('tailor') as HTMLButtonElement;
 const coverLetterBtn = el('cover-letter') as HTMLButtonElement;
 const clearBtn = el('clear') as HTMLButtonElement;
@@ -24,6 +25,7 @@ async function loadMeta(): Promise<StoredResume | undefined> {
 function renderCurrent(meta: StoredResume | undefined) {
   if (!meta) {
     currentEl.textContent = 'No resume uploaded yet.';
+    previewBtn.disabled = true;
     tailorBtn.disabled = true;
     coverLetterBtn.disabled = true;
     clearBtn.disabled = true;
@@ -31,6 +33,7 @@ function renderCurrent(meta: StoredResume | undefined) {
   }
   const when = new Date(meta.uploadedAt).toLocaleString();
   currentEl.textContent = `${meta.fileName} (${meta.mimeType}) — uploaded ${when}`;
+  previewBtn.disabled = false;
   tailorBtn.disabled = false;
   coverLetterBtn.disabled = false;
   clearBtn.disabled = false;
@@ -72,6 +75,28 @@ fileInput.addEventListener('change', async () => {
     await chrome.storage.local.set({ currentResume: meta });
     setStatus('Resume saved.', 'success');
     await refresh();
+  } catch (e) {
+    setStatus(e instanceof Error ? e.message : String(e), 'error');
+  }
+});
+
+previewBtn.addEventListener('click', async () => {
+  setStatus('Opening current resume preview…');
+  try {
+    const meta = await loadMeta();
+    if (!meta) {
+      setStatus('No resume uploaded yet.', 'error');
+      return;
+    }
+    const blob = await getResumeBlob(meta.id);
+    if (!blob) {
+      setStatus('Stored resume not found. Please upload again.', 'error');
+      return;
+    }
+    const html = await blob.text();
+    const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    await chrome.tabs.create({ url, active: true });
+    setStatus('Opened current resume in a new tab.', 'success');
   } catch (e) {
     setStatus(e instanceof Error ? e.message : String(e), 'error');
   }

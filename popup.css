@@ -132,6 +132,17 @@ body {
   gap: 8px;
 }
 
+.secondary-upload {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.secondary-upload .upload {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
 .btn-primary,
 .btn-secondary {
   padding: 10px 12px;

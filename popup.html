@@ -23,27 +23,30 @@
           description text</strong> (plain text is sent—no page HTML/CSS/JS), then run tailoring. You can also generate a matching cover letter from the same selected text.
         </p>
 
-        <label class="upload">
-          <span class="upload-label">Upload HTML</span>
-          <input
-            id="file"
-            type="file"
-            accept=".html,.htm,text/html,application/xhtml+xml"
-          />
-        </label>
-
         <p id="current" class="current"></p>
 
         <div class="actions">
+          <button id="preview" class="btn-primary" type="button" disabled>Preview current resume</button>
           <button id="tailor" class="btn-primary" type="button" disabled>Tailor from page selection</button>
           <button id="cover-letter" class="btn-primary" type="button" disabled>Generate cover letter</button>
           <button id="clear" class="btn-secondary" type="button" disabled>Remove resume</button>
         </div>
 
+        <div class="secondary-upload">
+          <label class="upload">
+            <span class="upload-label">Upload or replace HTML resume</span>
+            <input
+              id="file"
+              type="file"
+              accept=".html,.htm,text/html,application/xhtml+xml"
+            />
+          </label>
+        </div>
+
         <p id="status" class="status" data-kind="info"></p>
 
         <p class="footer">
-          <a id="open-options" class="link" href="#">OpenAI settings</a>
+          <a id="open-options" class="link" href="#">AI model settings</a>
         </p>
       </section>
     </div>

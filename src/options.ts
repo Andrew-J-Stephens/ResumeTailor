@@ -39,7 +39,7 @@ function providerApiKeyHelp(provider: Provider): string {
 function providerModelHint(provider: Provider): string {
   return provider === 'anthropic'
     ? 'Includes Claude Sonnet 4.5 / 4.6 presets. If your account uses a different exact ID, choose Custom model ID.'
-    : 'Use OpenAI API model IDs. You can choose Custom model ID if needed.';
+    : 'Includes GPT presets. You can choose Custom model ID if needed.';
 }
 
 function rebuildModelOptions(provider: Provider): void {
@@ -56,7 +56,12 @@ function rebuildModelOptions(provider: Provider): void {
       else if (m === 'claude-3-haiku-20240307') option.textContent = 'Claude 3 Haiku (lowest cost)';
       else option.textContent = m;
     } else {
-      option.textContent = m;
+      if (m === 'gpt-4o-mini') option.textContent = 'GPT-4o mini (fast, lower cost)';
+      else if (m === 'gpt-4o') option.textContent = 'GPT-4o';
+      else if (m === 'gpt-4-turbo') option.textContent = 'GPT-4 Turbo';
+      else if (m === 'gpt-4') option.textContent = 'GPT-4';
+      else if (m === 'gpt-3.5-turbo') option.textContent = 'GPT-3.5 Turbo (lowest cost)';
+      else option.textContent = m;
     }
     modelSelect.appendChild(option);
   }
