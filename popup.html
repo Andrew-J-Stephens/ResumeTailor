@@ -12,41 +12,33 @@
         <div class="brand-mark" aria-hidden="true"></div>
         <div class="header-text">
           <h1 class="title">Resume Tailor</h1>
-          <p class="subtitle">Tailor your HTML resume to the job</p>
+          <p class="subtitle">Built-in resume · A4 PDF downloads</p>
         </div>
       </header>
 
       <section class="card">
         <p class="hint">
-          Upload your resume as <strong>.html</strong>. The tailored resume is auto-downloaded as A4 PDF
-          (<strong>CompanyName-resume-YYYY-MM-DD.pdf</strong> when the employer is known), with a print preview fallback if needed. On a job posting, <strong>highlight only the job
-          description text</strong> (plain text is sent—no page HTML/CSS/JS), then run tailoring. You can also generate a matching cover letter from the same selected text.
+          Layout and styling come from the extension’s <strong>built-in resume template</strong>. The AI only adjusts wording
+          to fit the role. On a job posting, <strong>select the job description</strong> (plain text is sent—no page HTML).
+          Tailored files download as PDF
+          (<strong>CompanyName-resume-YYYY-MM-DD.pdf</strong> when the employer is known). If automatic PDF fails, a print
+          preview tab opens instead.
         </p>
 
-        <p id="current" class="current"></p>
+        <p class="template-note">
+          To change layout or styling, edit <code>src/lib/resume-template.html</code> in the project and rebuild the extension.
+        </p>
 
         <div class="actions">
-          <button id="preview" class="btn-primary" type="button" disabled>Preview current resume</button>
-          <button id="tailor" class="btn-primary" type="button" disabled>Tailor from page selection</button>
-          <button id="cover-letter" class="btn-primary" type="button" disabled>Generate cover letter</button>
-          <button id="clear" class="btn-secondary" type="button" disabled>Remove resume</button>
-        </div>
-
-        <div class="secondary-upload">
-          <label class="upload">
-            <span class="upload-label">Upload or replace HTML resume</span>
-            <input
-              id="file"
-              type="file"
-              accept=".html,.htm,text/html,application/xhtml+xml"
-            />
-          </label>
+          <button id="preview" class="btn-primary" type="button">Preview resume</button>
+          <button id="tailor" class="btn-primary" type="button">Tailor resume</button>
+          <button id="cover-letter" class="btn-primary" type="button">Generate cover letter</button>
         </div>
 
         <p id="status" class="status" data-kind="info"></p>
 
         <p class="footer">
-          <a id="open-options" class="link" href="#">AI model settings</a>
+          <a id="open-options" class="link" href="#">Extension settings</a>
         </p>
       </section>
     </div>

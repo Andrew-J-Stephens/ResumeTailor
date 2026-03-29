@@ -87,60 +87,26 @@ body {
   font-weight: 600;
 }
 
-.upload {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 11px 12px;
-  border: 1px dashed rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 13px;
-  color: var(--text-primary);
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.upload:hover {
-  border-color: rgba(16, 163, 127, 0.45);
-  background: rgba(16, 163, 127, 0.08);
-}
-
-.upload-label {
-  pointer-events: none;
-}
-
-.upload input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.current {
-  margin: 12px 0 10px;
+.template-note {
+  margin: 0 0 14px;
   font-size: 11px;
   line-height: 1.45;
   color: var(--text-muted);
   word-break: break-word;
 }
 
+.template-note code {
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-secondary);
+}
+
 .actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.secondary-upload {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.secondary-upload .upload {
-  font-size: 12px;
-  opacity: 0.9;
 }
 
 .btn-primary,

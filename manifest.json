@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Resume Tailor",
   "version": "1.0.0",
-  "description": "Tailor your HTML resume to a job description using your OpenAI key; auto-download a tailored A4 PDF.",
+  "description": "Tailor a built-in resume and generate cover letters from selected job text; download A4 PDFs using your API key.",
   "permissions": [
     "storage",
     "contextMenus",

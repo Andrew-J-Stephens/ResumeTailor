@@ -26,6 +26,9 @@ const base = {
   sourcemap: false,
   minify: false,
   logLevel: 'info',
+  loader: {
+    '.html': 'text',
+  },
 };
 
 async function run() {
