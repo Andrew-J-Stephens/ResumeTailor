@@ -6,8 +6,9 @@ import {
   parseTailorPointsFromAssistant,
 } from './resumeTemplateApply';
 import { MAX_JOB_DESCRIPTION_CHARS } from './jobSelection';
-import type { ResumeBuilderConfig } from './resumeTemplateGenerator';
-import { SAMPLE_RESUME_BUILDER_CONFIG } from './resumeTemplateGenerator';
+import { isValidSectionId } from './resumeSlots';
+import type { ResumeBuilderConfig, ResumeSectionConfig, ResumeSkillsRow } from './resumeTemplateGenerator';
+import { SAMPLE_RESUME_BUILDER_CONFIG, slugifySectionId } from './resumeTemplateGenerator';
 import { loadResumeTemplateHtml } from './templateStorage';
 
 /** Max chars of bundled resume HTML included in the cover-letter API prompt. */
@@ -104,20 +105,21 @@ function buildPointsUserMessage(
     'Job description:',
     jobPart,
     '',
-    'Current resume content as JSON. Tailor wording only; keep the same array lengths and nesting.',
+    'Current resume content as JSON. Tailor wording only; keep the same array lengths, section count, section ids, and section types.',
     snapshotJson,
     '',
     'Reply with a single JSON object only (no markdown fences, no commentary). Keys:',
     '- "company": hiring employer from the job text, or "Unknown".',
     '- "summary": plain text, 2-4 sentences.',
-    '- "experience": [ [ bullets for role 1 ], [ bullets for role 2 ] ] — same string counts as input.',
-    '- "projects": [ [...], [...] ] — same counts as input.',
-    '- "awards": [ [...], [...] ] — same counts as input.',
-    '- "skills": { "programmingLanguages", "cloudDevOps", "apisDatabases", "testingDeployment" } — plain strings, no HTML.',
+    '- "sections": array — same length and order as in the input. Each item must include:',
+    '  - "id": string — must match the corresponding input section id.',
+    '  - "type": "bullets" or "skills" — must match the input.',
+    '  - If bullets: "lists": [ [ strings for first list ], [ strings for second list ], … ] — same number of lists and same bullet count per list as input.',
+    '  - If skills: "values": [ string, … ] — same count as input (plain strings, no HTML).',
     '',
-    'Rules: Do not emit HTML. Do not change employers, role titles, dates, schools, or degree lines (fixed in the document). Mirror job keywords in bullets and skills. Plausible metrics are OK.',
+    'Rules: Do not emit HTML. Do not change employers, role titles, dates, schools, or degree lines (fixed in the document). Mirror job keywords in bullets and skill lines. Plausible metrics are OK.',
     'Do not use hyphens, en dashes, or em dashes as phrase separators; use commas, and use the word "to" for ranges when needed.',
-    'Keep the same number of top-level arrays for experience, projects, and awards as in the input, and the same bullet count inside each (use empty strings only to mean “keep prior wording” for that bullet).',
+    'Use empty strings only inside lists/values to mean “keep prior wording” for that slot.',
   ].join('\n');
 }
 
@@ -254,6 +256,158 @@ function normalizeListBlockFromAi(x: unknown): { titleLine: string; bullets: str
   return { titleLine, bullets: bullets.length > 0 ? bullets : [''] };
 }
 
+function legacySkillRowsFromObject(skillsIn: unknown): ResumeSkillsRow[] {
+  const sk =
+    skillsIn && typeof skillsIn === 'object' ? (skillsIn as Record<string, unknown>) : {};
+  const pick = (k: string): string =>
+    typeof sk[k] === 'string' ? (sk[k] as string).replace(/\s+/g, ' ').trim() : '';
+  return [
+    { label: 'Programming languages:', value: pick('programmingLanguages') },
+    { label: 'Cloud & DevOps:', value: pick('cloudDevOps') },
+    { label: 'APIs / databases:', value: pick('apisDatabases') },
+    { label: 'Testing & deployment:', value: pick('testingDeployment') },
+  ];
+}
+
+function legacySectionsFromAi(o: Record<string, unknown>): ResumeSectionConfig[] {
+  const used = new Set<string>();
+  const sections: ResumeSectionConfig[] = [];
+
+  const exp: { titleLine: string; bullets: string[] }[] = [];
+  if (Array.isArray(o.experiences)) {
+    for (const item of o.experiences) {
+      const b = normalizeListBlockFromAi(item);
+      if (b) exp.push(b);
+    }
+  }
+  if (exp.length === 0) return [];
+
+  used.add('experience');
+  sections.push({
+    id: 'experience',
+    heading: 'Professional Experience',
+    kind: 'bullets',
+    blocks: exp,
+  });
+
+  const pullBlocks = (key: string) => {
+    const out: { titleLine: string; bullets: string[] }[] = [];
+    if (!Array.isArray(o[key])) return out;
+    for (const item of o[key]) {
+      const b = normalizeListBlockFromAi(item);
+      if (b) out.push(b);
+    }
+    return out;
+  };
+
+  const proj = pullBlocks('projects');
+  if (proj.length > 0) {
+    used.add('projects');
+    sections.push({ id: 'projects', heading: 'Projects', kind: 'bullets', blocks: proj });
+  }
+
+  const awards = pullBlocks('awards');
+  if (awards.length > 0) {
+    used.add('awards');
+    sections.push({ id: 'awards', heading: 'Awards', kind: 'bullets', blocks: awards });
+  }
+
+  const rows = legacySkillRowsFromObject(o.skills);
+  const sid = slugifySectionId('skills', used);
+  sections.push({ id: sid, heading: 'Skills', kind: 'skills', rows });
+
+  return sections;
+}
+
+function normalizeAiSectionFromUnknown(x: unknown, used: Set<string>): ResumeSectionConfig | null {
+  if (!x || typeof x !== 'object') return null;
+  const o = x as Record<string, unknown>;
+  const heading =
+    typeof o.heading === 'string'
+      ? o.heading.replace(/\s+/g, ' ').trim()
+      : typeof o.title === 'string'
+        ? o.title.replace(/\s+/g, ' ').trim()
+        : '';
+
+  const kindRaw = String(o.kind ?? o.type ?? '').toLowerCase();
+  const hasRows = Array.isArray(o.rows);
+  const hasBlocks = Array.isArray(o.blocks);
+  const explicitBulletKind =
+    kindRaw === 'bullets' ||
+    kindRaw === 'bullet' ||
+    kindRaw === 'list' ||
+    kindRaw === 'bulleted' ||
+    kindRaw === 'experience';
+  const preferSkills =
+    kindRaw === 'skills' ||
+    kindRaw === 'skill' ||
+    kindRaw === 'skill_lines' ||
+    (!explicitBulletKind && hasRows && !hasBlocks);
+
+  const idRaw = typeof o.id === 'string' ? o.id.trim() : '';
+  let id: string;
+  if (idRaw && isValidSectionId(idRaw) && !used.has(idRaw)) {
+    id = idRaw;
+    used.add(id);
+  } else {
+    id = slugifySectionId(heading || (preferSkills ? 'Skills' : 'Section'), used);
+  }
+
+  if (preferSkills) {
+    const rows: ResumeSkillsRow[] = [];
+    if (Array.isArray(o.rows)) {
+      for (const r of o.rows) {
+        if (r && typeof r === 'object') {
+          const ro = r as Record<string, unknown>;
+          let label = typeof ro.label === 'string' ? ro.label.replace(/\s+/g, ' ').trim() : '';
+          const value = typeof ro.value === 'string' ? ro.value.replace(/\s+/g, ' ').trim() : '';
+          if (!label && typeof ro.name === 'string') label = ro.name.replace(/\s+/g, ' ').trim();
+          if (label || value) rows.push({ label: label || ' ', value: value || ' ' });
+        }
+      }
+    }
+    if (rows.length === 0) rows.push({ label: 'Skills:', value: '' });
+    return { id, heading: heading || 'Skills', kind: 'skills', rows };
+  }
+
+  const blocks: { titleLine: string; bullets: string[] }[] = [];
+  if (Array.isArray(o.blocks)) {
+    for (const b of o.blocks) {
+      const nb = normalizeListBlockFromAi(b);
+      if (nb) blocks.push(nb);
+    }
+  }
+  if (blocks.length === 0) {
+    const nb = normalizeListBlockFromAi(o);
+    if (nb) blocks.push(nb);
+  }
+  if (blocks.length === 0) return null;
+  return { id, heading: heading || 'Experience', kind: 'bullets', blocks };
+}
+
+function sanitizeConfigSections(sections: ResumeSectionConfig[]): ResumeSectionConfig[] {
+  return sections.map((s) => {
+    if (s.kind === 'bullets') {
+      return {
+        ...s,
+        heading: sanitizeResumeCopyDashes(s.heading),
+        blocks: s.blocks.map((b) => ({
+          titleLine: sanitizeResumeCopyDashes(b.titleLine),
+          bullets: b.bullets.map(sanitizeResumeCopyDashes),
+        })),
+      };
+    }
+    return {
+      ...s,
+      heading: sanitizeResumeCopyDashes(s.heading),
+      rows: s.rows.map((r) => ({
+        label: sanitizeResumeCopyDashes(r.label),
+        value: sanitizeResumeCopyDashes(r.value),
+      })),
+    };
+  });
+}
+
 function normalizeAiResumeBuilderConfig(parsed: unknown): ResumeBuilderConfig {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('AI did not return a JSON object for the resume import.');
@@ -263,51 +417,36 @@ function normalizeAiResumeBuilderConfig(parsed: unknown): ResumeBuilderConfig {
   const str = (key: string, fallback: string) =>
     typeof o[key] === 'string' ? (o[key] as string).replace(/\s+/g, ' ').trim() : fallback;
 
-  let experiences: ResumeBuilderConfig['experiences'] = [];
-  if (Array.isArray(o.experiences)) {
-    for (const item of o.experiences) {
-      const b = normalizeListBlockFromAi(item);
-      if (b) experiences.push(b);
+  let sections: ResumeSectionConfig[] = [];
+  if (Array.isArray(o.sections) && o.sections.length > 0) {
+    const used = new Set<string>();
+    for (const item of o.sections) {
+      const sec = normalizeAiSectionFromUnknown(item, used);
+      if (sec) sections.push(sec);
     }
   }
-  if (experiences.length === 0) {
-    throw new Error('AI response had no experiences. Try again or use a clearer HTML resume.');
+
+  if (sections.length === 0) {
+    sections = legacySectionsFromAi(o);
   }
 
-  const mapList = (key: string): ResumeBuilderConfig['projects'] => {
-    const out: ResumeBuilderConfig['projects'] = [];
-    if (!Array.isArray(o[key])) return out;
-    for (const item of o[key]) {
-      const b = normalizeListBlockFromAi(item);
-      if (b) out.push(b);
-    }
-    return out;
-  };
-
-  const projects = mapList('projects');
-  const awards = mapList('awards');
-
-  let skillsIn = o.skills;
-  const skillsBase = SAMPLE_RESUME_BUILDER_CONFIG.skills;
-  if (!skillsIn || typeof skillsIn !== 'object') skillsIn = {};
-  const sk = skillsIn as Record<string, unknown>;
-  const skillStr = (k: keyof typeof skillsBase) =>
-    typeof sk[k] === 'string' ? (sk[k] as string).replace(/\s+/g, ' ').trim() : skillsBase[k];
+  const hasWorkBullets = sections.some(
+    (s) =>
+      s.kind === 'bullets' &&
+      s.blocks.some((b) => b.bullets.some((x) => x.replace(/\s+/g, '').length > 0))
+  );
+  if (!hasWorkBullets) {
+    throw new Error(
+      'AI response had no bullet sections with substantive content (e.g. experience). Try again or use a clearer resume.'
+    );
+  }
 
   const raw: ResumeBuilderConfig = {
     name: str('name', 'Your Name') || 'Your Name',
     tagline: str('tagline', 'Role') || 'Role',
     email: str('email', 'you@example.com') || 'you@example.com',
     summary: str('summary', SAMPLE_RESUME_BUILDER_CONFIG.summary),
-    experiences,
-    projects,
-    awards,
-    skills: {
-      programmingLanguages: skillStr('programmingLanguages'),
-      cloudDevOps: skillStr('cloudDevOps'),
-      apisDatabases: skillStr('apisDatabases'),
-      testingDeployment: skillStr('testingDeployment'),
-    },
+    sections,
   };
 
   return {
@@ -316,24 +455,7 @@ function normalizeAiResumeBuilderConfig(parsed: unknown): ResumeBuilderConfig {
     name: sanitizeResumeCopyDashes(raw.name),
     tagline: sanitizeResumeCopyDashes(raw.tagline),
     summary: sanitizeResumeCopyDashes(raw.summary),
-    experiences: raw.experiences.map((e) => ({
-      titleLine: sanitizeResumeCopyDashes(e.titleLine),
-      bullets: e.bullets.map(sanitizeResumeCopyDashes),
-    })),
-    projects: raw.projects.map((p) => ({
-      titleLine: sanitizeResumeCopyDashes(p.titleLine),
-      bullets: p.bullets.map(sanitizeResumeCopyDashes),
-    })),
-    awards: raw.awards.map((a) => ({
-      titleLine: sanitizeResumeCopyDashes(a.titleLine),
-      bullets: a.bullets.map(sanitizeResumeCopyDashes),
-    })),
-    skills: {
-      programmingLanguages: sanitizeResumeCopyDashes(raw.skills.programmingLanguages),
-      cloudDevOps: sanitizeResumeCopyDashes(raw.skills.cloudDevOps),
-      apisDatabases: sanitizeResumeCopyDashes(raw.skills.apisDatabases),
-      testingDeployment: sanitizeResumeCopyDashes(raw.skills.testingDeployment),
-    },
+    sections: sanitizeConfigSections(raw.sections),
   };
 }
 
@@ -366,32 +488,33 @@ export async function extractResumeBuilderConfigFromImportWithAi(
     'You extract structured resume content for a template builder inside a browser extension.',
     'Return a single JSON object only (no markdown fences, no commentary before or after).',
     '',
-    'Exact JSON shape:',
+    'Preferred JSON shape (use this unless the document is clearly legacy):',
     '{',
     '  "name": string,',
     '  "tagline": string, one line; you may use " | " between short phrases (e.g. role | credential),',
     '  "email": string,',
     '  "summary": string, 2–5 sentences, plain text,',
-    '  "experiences": [ { "titleLine": string, "bullets": string[] }, ... ],',
-    '  "projects": [ { "titleLine": string, "bullets": string[] }, ... ],',
-    '  "awards": [ { "titleLine": string, "bullets": string[] }, ... ],',
-    '  "skills": {',
-    '    "programmingLanguages": string,',
-    '    "cloudDevOps": string,',
-    '    "apisDatabases": string,',
-    '    "testingDeployment": string',
-    '  }',
+    '  "sections": [',
+    '    { "id": string (optional), "heading": string, "kind": "bullets", "blocks": [ { "titleLine": string, "bullets": string[] }, ... ] },',
+    '    { "heading": string, "kind": "skills", "rows": [ { "label": string, "value": string }, ... ] },',
+    '    … any number of sections: e.g. Education, Publications, Volunteering, Certifications, etc.',
+    '  ]',
     '}',
     '',
-    'Rules:',
+    'Section rules:',
+    '- kind "bullets": repeating blocks (title line + achievement bullets). Use for employment, projects, education with bullets, etc.',
+    '- kind "skills": flexible labeled lines — any labels (e.g. Technical, Languages, Certifications, Tools). Not limited to software.',
+    '- Put every major resume heading into one section; omit sections that do not exist in the source.',
+    '',
+    'Backward-compatible alternative: you may instead return legacy keys "experiences", optional "projects", optional "awards", and "skills" as a flat object with programmingLanguages, cloudDevOps, apisDatabases, testingDeployment strings — only if you cannot produce "sections".',
+    '',
+    'General rules:',
     `- ${sourceNote}`,
     '- Do not invent employers, schools, degrees, or date ranges that are not clearly supported by the document.',
-    '- At least one experience object with at least one non-empty bullet.',
-    '- titleLine for each role/project/award: one plain-text line, no HTML tags in output. Separate company, place, role, and dates with commas (not hyphens or dashes). Put the date range last using "Month YYYY to Month YYYY" or "Month YYYY to Present" (the word "to", never a dash).',
+    '- At least one "bullets" section with substantive roles or equivalent (e.g. work experience) and at least one non-empty bullet.',
+    '- For each bullets block: titleLine is one plain-text line, no HTML. Separate company, place, role, and dates with commas (not hyphens or dashes). Put the date range last using "Month YYYY to Month YYYY" or "Month YYYY to Present" (the word "to", never a dash).',
     '- bullets: achievement lines only; strip leading bullets or punctuation used as list markers.',
     '- In every string: no en dashes, em dashes, or spaced hyphens as separators; use commas or "to" for ranges.',
-    '- projects and awards may be empty arrays if the resume has none.',
-    '- skills: split or phrase naturally; values only (labels are fixed elsewhere).',
   ].join('\n');
 
   const userLabel =
@@ -435,10 +558,12 @@ export async function tailorFullHtml(
     content: [
       'You tailor resume copy to a job posting. Output is JSON only; the app injects text into the user’s HTML template using data-resume-slot markers (you never write HTML).',
       '',
-      'Goals: Strong ATS and human match—mirror the posting’s language, stack, and responsibilities. Integrate keywords naturally in bullets and skills.',
+      'The input JSON has a "sections" array. Each section has an "id", a "type" of either "bullets" or "skills", and either "lists" (arrays of bullet strings per job/block) or "values" (strings for each labeled skill line). Preserve section count, ids, types, list count, list lengths, and values count exactly.',
+      '',
+      'Goals: Strong ATS and human match—mirror the posting’s language, stack, and responsibilities. Integrate keywords naturally in bullets and in skills lines.',
       'Keep employers, job titles at real companies, employment dates, schools, and degrees consistent with the input JSON (do not rename companies or change date strings).',
       'Rewrite bullets for impact: action verb + scope + how + measurable outcome when plausible. Prefer ownership verbs (built, shipped, led, designed). Weave job-specific technologies into experience bullets where credible.',
-      'Rebuild skills strings around the posting; lead with must-haves from the job text.',
+      'Rebuild skills line values (only the values, not labels) around the posting; lead with must-haves from the job text.',
       'The "company" field is the hiring employer name for filenames (or Unknown).',
       'Do not use hyphens, en dashes, or em dashes as phrase separators (commas are fine; use the word "to" for ranges when needed).',
     ].join('\n'),

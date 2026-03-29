@@ -277,6 +277,92 @@ body {
   resize: vertical;
 }
 
+.sections-root {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 12px;
+}
+
+.section-add-row {
+  margin-bottom: 14px;
+}
+
+.section-block {
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.18);
+  position: relative;
+}
+
+.section-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+  padding-right: 100px;
+}
+
+.section-block-head .section-heading-wrap {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.section-block-head .section-kind-wrap {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.btn-remove-section {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.skill-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+  padding: 38px 10px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.12);
+  position: relative;
+}
+
+.skill-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.skill-row .btn-remove-skill-row {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
 .blocks {
   display: flex;
   flex-direction: column;

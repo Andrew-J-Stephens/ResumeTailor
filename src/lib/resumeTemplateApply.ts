@@ -1,29 +1,28 @@
 import { DOMParser } from 'linkedom';
 import { sanitizeResumeCopyDashes } from './copySanitize';
-import BUNDLED_RESUME_TEMPLATE_HTML from './resume-template.html';
-import { getSortedUlsBySlotPrefix, SKILL_SLOT_IDS, validateResumeSlots } from './resumeSlots';
+import { buildSlottedResumeHtml, SAMPLE_RESUME_BUILDER_CONFIG } from './resumeTemplateGenerator';
+import {
+  getSortedSectionBlockUls,
+  getSortedSkillValueElements,
+  validateResumeSlots,
+} from './resumeSlots';
 
-export type TailorSkillsJson = {
-  programmingLanguages: string;
-  cloudDevOps: string;
-  apisDatabases: string;
-  testingDeployment: string;
+export type TailorSectionBullets = {
+  id: string;
+  type: 'bullets';
+  lists: string[][];
+};
+
+export type TailorSectionSkills = {
+  id: string;
+  type: 'skills';
+  values: string[];
 };
 
 export type TailorPointsJson = {
   company: string;
   summary: string;
-  experience: string[][];
-  projects: string[][];
-  awards: string[][];
-  skills: TailorSkillsJson;
-};
-
-const SKILL_KEY_BY_SLOT: Record<string, keyof TailorSkillsJson> = {
-  'skill-programmingLanguages': 'programmingLanguages',
-  'skill-cloudDevOps': 'cloudDevOps',
-  'skill-apisDatabases': 'apisDatabases',
-  'skill-testingDeployment': 'testingDeployment',
+  sections: (TailorSectionBullets | TailorSectionSkills)[];
 };
 
 function escapeHtml(text: string): string {
@@ -38,9 +37,9 @@ function escapeComment(text: string): string {
   return text.replace(/--/g, ' ').trim();
 }
 
-/** Shipped default template (before any user save in storage). */
+/** Default template HTML for tailoring when the user has not saved a custom one. */
 export function getBundledResumeTemplateHtml(): string {
-  return BUNDLED_RESUME_TEMPLATE_HTML;
+  return buildSlottedResumeHtml(SAMPLE_RESUME_BUILDER_CONFIG);
 }
 
 function parseDoc(html: string) {
@@ -53,23 +52,7 @@ function listItemPlainTexts(ul: Element): string[] {
   );
 }
 
-function extractSkillsFromSlots(body: HTMLElement): TailorSkillsJson {
-  const out: Partial<TailorSkillsJson> = {};
-  for (const slotId of SKILL_SLOT_IDS) {
-    const el = body.querySelector(`[data-resume-slot="${slotId}"]`);
-    const key = SKILL_KEY_BY_SLOT[slotId];
-    if (!el || !key) continue;
-    out[key] = (el.textContent ?? '').replace(/^\u00a0\s*/, '').replace(/\s+/g, ' ').trim();
-  }
-  return {
-    programmingLanguages: out.programmingLanguages ?? '',
-    cloudDevOps: out.cloudDevOps ?? '',
-    apisDatabases: out.apisDatabases ?? '',
-    testingDeployment: out.testingDeployment ?? '',
-  };
-}
-
-/** Plain snapshot of editable copy (for prompts and merge fallbacks). */
+/** Section order and shape follow <p.section-title> markers in the document. */
 export function extractTailorSnapshot(html: string): TailorPointsJson {
   const doc = parseDoc(html);
   const body = doc.body;
@@ -86,17 +69,28 @@ export function extractTailorSnapshot(html: string): TailorPointsJson {
   const summaryEl = body.querySelector('[data-resume-slot="summary"]');
   const summary = (summaryEl?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
-  const experience = getSortedUlsBySlotPrefix(body, 'experience').map(listItemPlainTexts);
-  const projects = getSortedUlsBySlotPrefix(body, 'project').map(listItemPlainTexts);
-  const awards = getSortedUlsBySlotPrefix(body, 'award').map(listItemPlainTexts);
+  const sections: TailorPointsJson['sections'] = [];
+  const titles = body.querySelectorAll('p.section-title[data-resume-section-id]');
+  for (const titleEl of Array.from(titles)) {
+    const id = titleEl.getAttribute('data-resume-section-id') ?? '';
+    const kind = titleEl.getAttribute('data-resume-section-kind') ?? '';
+    if (kind === 'bullets') {
+      const uls = getSortedSectionBlockUls(bodyEl, id);
+      const lists = uls.map((ul) => listItemPlainTexts(ul));
+      sections.push({ id, type: 'bullets', lists });
+    } else if (kind === 'skills') {
+      const els = getSortedSkillValueElements(bodyEl, id);
+      const values = els.map((el) =>
+        (el.textContent ?? '').replace(/^\u00a0\s*/, '').replace(/\s+/g, ' ').trim()
+      );
+      sections.push({ id, type: 'skills', values });
+    }
+  }
 
   return {
     company: 'Unknown',
     summary,
-    experience,
-    projects,
-    awards,
-    skills: extractSkillsFromSlots(bodyEl),
+    sections,
   };
 }
 
@@ -116,27 +110,38 @@ function normalizeBulletArray(
   return out;
 }
 
-function normalizeSkills(incoming: unknown, fallback: TailorSkillsJson): TailorSkillsJson {
-  const o = incoming && typeof incoming === 'object' ? (incoming as Record<string, unknown>) : {};
-  const pick = (k: keyof TailorSkillsJson): string => {
-    const v = o[k];
-    const t = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
-    return t.length > 0 ? t : fallback[k];
-  };
-  return {
-    programmingLanguages: pick('programmingLanguages'),
-    cloudDevOps: pick('cloudDevOps'),
-    apisDatabases: pick('apisDatabases'),
-    testingDeployment: pick('testingDeployment'),
-  };
-}
-
 function stripOuterCodeFences(s: string): string {
   let h = s.trim();
   if (h.startsWith('```')) {
     h = h.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```\s*$/s, '').trim();
   }
   return h;
+}
+
+function normalizeIncomingSection(
+  raw: unknown,
+  base: TailorSectionBullets | TailorSectionSkills
+): TailorSectionBullets | TailorSectionSkills {
+  if (!raw || typeof raw !== 'object') {
+    return base.type === 'bullets'
+      ? { ...base, lists: base.lists.map((row) => [...row]) }
+      : { ...base, values: [...base.values] };
+  }
+  const o = raw as Record<string, unknown>;
+  if (base.type === 'bullets') {
+    const listsIn = Array.isArray(o.lists) ? o.lists : [];
+    const lists = base.lists.map((fb, i) =>
+      normalizeBulletArray(listsIn[i], fb.length, fb)
+    );
+    return { id: base.id, type: 'bullets', lists };
+  }
+  const valsIn = Array.isArray(o.values) ? o.values : [];
+  const values = base.values.map((fb, i) => {
+    const rawV = valsIn[i];
+    const t = typeof rawV === 'string' ? rawV.replace(/\s+/g, ' ').trim() : '';
+    return t.length > 0 ? t : fb;
+  });
+  return { id: base.id, type: 'skills', values };
 }
 
 export function parseTailorPointsFromAssistant(raw: string, base: TailorPointsJson): TailorPointsJson {
@@ -167,28 +172,38 @@ export function parseTailorPointsFromAssistant(raw: string, base: TailorPointsJs
   const summary =
     typeof summaryRaw === 'string' ? summaryRaw.replace(/\s+/g, ' ').trim() : '';
 
-  const expIn = Array.isArray(obj.experience) ? obj.experience : [];
-  const projIn = Array.isArray(obj.projects) ? obj.projects : [];
-  const awardIn = Array.isArray(obj.awards) ? obj.awards : [];
+  const sectionsIn = Array.isArray(obj.sections) ? obj.sections : [];
+  const byId = new Map<string, unknown>();
+  for (const s of sectionsIn) {
+    if (s && typeof s === 'object' && typeof (s as Record<string, unknown>).id === 'string') {
+      byId.set((s as Record<string, string>).id, s);
+    }
+  }
 
-  const exp = base.experience.map((fb, i) => normalizeBulletArray(expIn[i], fb.length, fb));
-  const proj = base.projects.map((fb, i) => normalizeBulletArray(projIn[i], fb.length, fb));
-  const awards = base.awards.map((fb, i) => normalizeBulletArray(awardIn[i], fb.length, fb));
+  const sections = base.sections.map((b, idx) => {
+    const incoming = byId.get(b.id) ?? sectionsIn[idx];
+    return normalizeIncomingSection(incoming, b);
+  });
 
-  const skills = normalizeSkills(obj.skills, base.skills);
+  const sanitizeSection = (s: TailorSectionBullets | TailorSectionSkills) => {
+    if (s.type === 'bullets') {
+      return {
+        id: s.id,
+        type: 'bullets' as const,
+        lists: s.lists.map((row) => row.map(sanitizeResumeCopyDashes)),
+      };
+    }
+    return {
+      id: s.id,
+      type: 'skills' as const,
+      values: s.values.map(sanitizeResumeCopyDashes),
+    };
+  };
 
   return {
     company: sanitizeResumeCopyDashes(company || 'Unknown'),
     summary: sanitizeResumeCopyDashes(summary.length > 0 ? summary : base.summary),
-    experience: exp.map((row) => row.map(sanitizeResumeCopyDashes)),
-    projects: proj.map((row) => row.map(sanitizeResumeCopyDashes)),
-    awards: awards.map((row) => row.map(sanitizeResumeCopyDashes)),
-    skills: {
-      programmingLanguages: sanitizeResumeCopyDashes(skills.programmingLanguages),
-      cloudDevOps: sanitizeResumeCopyDashes(skills.cloudDevOps),
-      apisDatabases: sanitizeResumeCopyDashes(skills.apisDatabases),
-      testingDeployment: sanitizeResumeCopyDashes(skills.testingDeployment),
-    },
+    sections: sections.map(sanitizeSection),
   };
 }
 
@@ -226,25 +241,19 @@ export function applyTailorPointsToTemplate(html: string, points: TailorPointsJs
   const summaryEl = body.querySelector('[data-resume-slot="summary"]');
   if (summaryEl) summaryEl.textContent = points.summary;
 
-  const expUls = getSortedUlsBySlotPrefix(body as unknown as HTMLElement, 'experience');
-  for (let i = 0; i < expUls.length; i++) {
-    setBulletList(expUls[i], points.experience[i] ?? []);
-  }
-
-  const projUls = getSortedUlsBySlotPrefix(body as unknown as HTMLElement, 'project');
-  for (let i = 0; i < projUls.length; i++) {
-    setBulletList(projUls[i], points.projects[i] ?? []);
-  }
-
-  const awardUls = getSortedUlsBySlotPrefix(body as unknown as HTMLElement, 'award');
-  for (let i = 0; i < awardUls.length; i++) {
-    setBulletList(awardUls[i], points.awards[i] ?? []);
-  }
-
-  for (const slotId of SKILL_SLOT_IDS) {
-    const el = body.querySelector(`[data-resume-slot="${slotId}"]`);
-    const key = SKILL_KEY_BY_SLOT[slotId];
-    if (el && key) el.textContent = points.skills[key];
+  const bodyEl = body as unknown as HTMLElement;
+  for (const sec of points.sections) {
+    if (sec.type === 'bullets') {
+      const uls = getSortedSectionBlockUls(bodyEl, sec.id);
+      for (let i = 0; i < uls.length; i++) {
+        setBulletList(uls[i], sec.lists[i] ?? []);
+      }
+    } else {
+      const els = getSortedSkillValueElements(bodyEl, sec.id);
+      for (let j = 0; j < els.length; j++) {
+        els[j].textContent = sec.values[j] ?? '';
+      }
+    }
   }
 
   const root = doc.documentElement;

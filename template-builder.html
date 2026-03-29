@@ -84,40 +84,17 @@
               </label>
             </div>
 
-            <h3 class="subsection-title">Experience</h3>
+            <h3 class="subsection-title">Resume sections</h3>
             <p class="subsection-hint">
-              End each role line with dates (e.g. <code>…Acme, Engineer May 2023 to Present</code>) so they align right in the
-              preview. Prefer commas between company, place, and title; avoid dashes as separators.
+              Add, remove, or reorder sections. Use <strong>Bulleted blocks</strong> for jobs, projects, education, etc. Use
+              <strong>Labeled lines</strong> for any skill-style content with your own labels (technical, languages,
+              certifications, tools, …). End each role line with dates (e.g.
+              <code>…Acme, Engineer May 2023 to Present</code>) for right-aligned dates in the preview. AI import fills a
+              <code>sections</code> array; tailoring preserves your section ids.
             </p>
-            <div id="exp-blocks" class="blocks"></div>
-            <button type="button" class="btn-small" id="btn-add-exp">Add role</button>
-
-            <h3 class="subsection-title">Projects</h3>
-            <div id="proj-blocks" class="blocks"></div>
-            <button type="button" class="btn-small" id="btn-add-proj">Add project</button>
-
-            <h3 class="subsection-title">Awards</h3>
-            <div id="award-blocks" class="blocks"></div>
-            <button type="button" class="btn-small" id="btn-add-award">Add award</button>
-
-            <h3 class="subsection-title">Skills (values only; labels are fixed for the AI)</h3>
-            <div class="field-grid">
-              <label class="field field-span-2">
-                <span class="field-label">Programming languages</span>
-                <input type="text" id="f-skill-pl" class="field-input" />
-              </label>
-              <label class="field field-span-2">
-                <span class="field-label">Cloud &amp; DevOps</span>
-                <input type="text" id="f-skill-cd" class="field-input" />
-              </label>
-              <label class="field field-span-2">
-                <span class="field-label">APIs / databases</span>
-                <input type="text" id="f-skill-ad" class="field-input" />
-              </label>
-              <label class="field field-span-2">
-                <span class="field-label">Testing &amp; deployment</span>
-                <input type="text" id="f-skill-td" class="field-input" />
-              </label>
+            <div id="sections-root" class="sections-root"></div>
+            <div class="section-add-row">
+              <button type="button" class="btn-small" id="btn-add-section">Add section</button>
             </div>
 
             <button type="button" class="btn-primary btn-regen" id="btn-regenerate">Regenerate HTML from form</button>
@@ -139,16 +116,14 @@
         <form method="dialog">
           <h3>Required <code>data-resume-slot</code> values</h3>
           <ul class="slots-list">
-            <li><code>summary</code> — one element (e.g. <code>&lt;p&gt;</code> or <code>&lt;span&gt;</code>)</li>
+            <li><code>summary</code> — one element (e.g. <code>&lt;p&gt;</code>)</li>
             <li>
-              <code>experience-0</code>, <code>experience-1</code>, … — each on a <code>&lt;ul&gt;</code> with one or more
-              <code>&lt;li&gt;</code>
+              Bulleted sections: each <code>&lt;ul&gt;</code> uses <code>data-resume-slot="sec-{id}-{n}"</code> (id starts
+              with a letter). The preceding section title has <code>data-resume-section-kind="bullets"</code>.
             </li>
-            <li><code>project-0</code>, … — <code>&lt;ul&gt;</code> lists</li>
-            <li><code>award-0</code>, … — <code>&lt;ul&gt;</code> lists</li>
             <li>
-              <code>skill-programmingLanguages</code>, <code>skill-cloudDevOps</code>, <code>skill-apisDatabases</code>,
-              <code>skill-testingDeployment</code> — elements whose text the AI replaces
+              Labeled-line sections: value spans use <code>data-resume-slot="skill-{id}-{n}"</code>; the section title uses
+              <code>data-resume-section-kind="skills"</code>.
             </li>
           </ul>
           <button type="submit" class="btn-primary">Close</button>
