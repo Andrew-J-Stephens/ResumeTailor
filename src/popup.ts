@@ -22,11 +22,22 @@ async function loadMeta(): Promise<StoredResume | undefined> {
   return res?.meta as StoredResume | undefined;
 }
 
-function renderCurrent(meta: StoredResume | undefined) {
+async function hasApiKey(): Promise<boolean> {
+  const { aiProvider, openaiApiKey, anthropicApiKey } = await chrome.storage.local.get([
+    'aiProvider',
+    'openaiApiKey',
+    'anthropicApiKey',
+  ]);
+  const key = aiProvider === 'anthropic' ? anthropicApiKey : openaiApiKey;
+  return typeof key === 'string' && key.trim().length > 0;
+}
+
+function renderCurrent(meta: StoredResume | undefined, canTailor: boolean) {
   if (!meta) {
-    currentEl.textContent = 'No resume uploaded yet.';
+    currentEl.textContent =
+      'No resume uploaded. Tailoring uses the built-in template; upload HTML for preview and cover letter.';
     previewBtn.disabled = true;
-    tailorBtn.disabled = true;
+    tailorBtn.disabled = !canTailor;
     coverLetterBtn.disabled = true;
     clearBtn.disabled = true;
     return;
@@ -34,14 +45,15 @@ function renderCurrent(meta: StoredResume | undefined) {
   const when = new Date(meta.uploadedAt).toLocaleString();
   currentEl.textContent = `${meta.fileName} (${meta.mimeType}) — uploaded ${when}`;
   previewBtn.disabled = false;
-  tailorBtn.disabled = false;
+  tailorBtn.disabled = !canTailor;
   coverLetterBtn.disabled = false;
   clearBtn.disabled = false;
 }
 
 async function refresh() {
   const meta = await loadMeta();
-  renderCurrent(meta);
+  const canTailor = await hasApiKey();
+  renderCurrent(meta, canTailor);
 }
 
 fileInput.addEventListener('change', async () => {

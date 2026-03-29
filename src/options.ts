@@ -176,3 +176,5 @@ saveBtn.addEventListener('click', async () => {
 });
 
 void load();
+
+export {};

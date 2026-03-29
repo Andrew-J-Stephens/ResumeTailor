@@ -67,3 +67,5 @@ async function run(): Promise<void> {
 void run().catch((e) => {
   setStatus(e instanceof Error ? e.message : String(e), 'error');
 });
+
+export {};

@@ -8,6 +8,7 @@ import {
   tailorFullHtml,
   readSettings,
   assertReady,
+  assertTailorReady,
   generateCoverLetterHtml,
 } from './lib/openai';
 import type { StoredResume, TailorResult } from './lib/types';
@@ -149,24 +150,13 @@ async function runTailor(jobDescription: string): Promise<TailorResult> {
     }
 
     const settings = await readSettings();
+    assertTailorReady(settings.apiKey);
     const meta = await getCurrentResumeMeta();
-    assertReady(meta, settings.apiKey);
-
-    const blob = await getResumeBlob(meta!.id);
-    if (!blob) {
-      return { ok: false, error: 'Resume file missing from storage. Upload again.' };
-    }
-
-    const originalHtml = await blob.text();
-    if (!originalHtml.trim()) {
-      return { ok: false, error: 'Stored HTML resume is empty.' };
-    }
 
     const tailoredHtml = await tailorFullHtml(
       settings,
       job,
-      originalHtml,
-      meta!.fileName
+      meta?.fileName ?? 'resume.html'
     );
 
     const { html: finalHtml, fileName } = buildTailoredDownloadFilename(
