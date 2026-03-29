@@ -5,6 +5,7 @@ const statusEl = el('status') as HTMLParagraphElement;
 const previewBtn = el('preview') as HTMLButtonElement;
 const tailorBtn = el('tailor') as HTMLButtonElement;
 const coverLetterBtn = el('cover-letter') as HTMLButtonElement;
+const openBuilder = el('open-builder') as HTMLAnchorElement;
 const openOptions = el('open-options') as HTMLAnchorElement;
 
 function setStatus(text: string, kind: 'info' | 'error' | 'success' = 'info') {
@@ -119,6 +120,11 @@ coverLetterBtn.addEventListener('click', async () => {
   } catch (e) {
     setStatus(e instanceof Error ? e.message : String(e), 'error');
   }
+});
+
+openBuilder.addEventListener('click', (ev) => {
+  ev.preventDefault();
+  void chrome.tabs.create({ url: chrome.runtime.getURL('template-builder.html') });
 });
 
 openOptions.addEventListener('click', (ev) => {

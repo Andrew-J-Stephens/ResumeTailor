@@ -19,8 +19,9 @@
       <section class="card" aria-labelledby="card-heading">
         <h2 id="card-heading" class="card-title">Provider &amp; model</h2>
         <p class="hint">
-          Resume Tailor uses your key to tailor the built-in resume and to generate cover letters. Nothing is sent to our
+          Resume Tailor uses your key to tailor your resume template and to generate cover letters. Nothing is sent to our
           servers—only to the provider you choose. Keys stay in this browser profile (<code>chrome.storage.local</code>).
+          Use <strong>Template builder</strong> (link below) to edit the resume HTML.
         </p>
 
         <div class="field">
@@ -73,6 +74,10 @@
         </div>
 
         <button id="save" class="btn-primary" type="button">Save</button>
+        <p class="builder-link-wrap">
+          <a id="open-template-builder" class="link" href="#">Open template builder</a>
+          <span class="builder-link-hint">— design the resume HTML the tailor uses</span>
+        </p>
         <p id="status" class="status" role="status"></p>
       </section>
     </div>

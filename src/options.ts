@@ -24,6 +24,7 @@ const modelHint = document.getElementById('model-hint') as HTMLParagraphElement;
 const modelCustomWrap = document.getElementById('model-custom-wrap') as HTMLDivElement;
 const modelCustom = document.getElementById('model-custom') as HTMLInputElement;
 const saveBtn = document.getElementById('save') as HTMLButtonElement;
+const openTemplateBuilder = document.getElementById('open-template-builder') as HTMLAnchorElement;
 const statusEl = document.getElementById('status')!;
 
 function currentProvider(): Provider {
@@ -161,6 +162,11 @@ providerSelect.addEventListener('change', async () => {
       ? data[modelStorage]
       : DEFAULT_MODEL_BY_PROVIDER[provider];
   applyModelToUi(provider, saved);
+});
+
+openTemplateBuilder.addEventListener('click', (ev) => {
+  ev.preventDefault();
+  void chrome.tabs.create({ url: chrome.runtime.getURL('template-builder.html') });
 });
 
 saveBtn.addEventListener('click', async () => {

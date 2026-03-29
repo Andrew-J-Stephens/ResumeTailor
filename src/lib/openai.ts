@@ -1,10 +1,11 @@
 import {
   applyTailorPointsToTemplate,
   extractTailorSnapshot,
-  getResumeTemplateHtml,
+  getBundledResumeTemplateHtml,
   parseTailorPointsFromAssistant,
 } from './resumeTemplateApply';
 import { MAX_JOB_DESCRIPTION_CHARS } from './jobSelection';
+import { loadResumeTemplateHtml } from './templateStorage';
 
 /** Max chars of bundled resume HTML included in the cover-letter API prompt. */
 const MAX_RESUME_HTML_CHARS = 24_000;
@@ -112,6 +113,7 @@ function buildPointsUserMessage(
     '- "skills": { "programmingLanguages", "cloudDevOps", "apisDatabases", "testingDeployment" } — plain strings, no HTML.',
     '',
     'Rules: Do not emit HTML. Do not change employers, role titles, dates, schools, or degree lines (fixed in the document). Mirror job keywords in bullets and skills. Plausible metrics are OK. Do not use em dashes.',
+    'Keep the same number of top-level arrays for experience, projects, and awards as in the input, and the same bullet count inside each (use empty strings only to mean “keep prior wording” for that bullet).',
   ].join('\n');
 }
 
@@ -243,14 +245,14 @@ export async function tailorFullHtml(
   jobDescription: string,
   resumeFileName: string
 ): Promise<string> {
-  const template = getResumeTemplateHtml();
+  const template = await loadResumeTemplateHtml(getBundledResumeTemplateHtml());
   const base = extractTailorSnapshot(template);
   const snapshotJson = JSON.stringify(base);
 
   const system: ChatMessage = {
     role: 'system',
     content: [
-      'You tailor resume copy to a job posting. Output is JSON only; the app injects text into a fixed HTML template (you never write HTML).',
+      'You tailor resume copy to a job posting. Output is JSON only; the app injects text into the user’s HTML template using data-resume-slot markers (you never write HTML).',
       '',
       'Goals: Strong ATS and human match—mirror the posting’s language, stack, and responsibilities. Integrate keywords naturally in bullets and skills.',
       'Keep employers, job titles at real companies, employment dates, schools, and degrees consistent with the input JSON (do not rename companies or change date strings).',
@@ -358,7 +360,7 @@ export async function generateCoverLetterHtml(
   settings: AiSettings,
   jobDescription: string
 ): Promise<string> {
-  const originalResumeHtml = getResumeTemplateHtml();
+  const originalResumeHtml = await loadResumeTemplateHtml(getBundledResumeTemplateHtml());
   const system: ChatMessage = {
     role: 'system',
     content: [

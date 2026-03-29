@@ -1,17 +1,6 @@
 import { DOMParser } from 'linkedom';
-import RESUME_TEMPLATE from './resume-template.html';
-
-/** Google-Docs-export list classes — must match `resume-template.html`. */
-const EXP_UL = ['ul.lst-kix_k868nd227eqx-0', 'ul.lst-kix_d42rme9lxv3b-0'] as const;
-const PROJ_UL = ['ul.lst-kix_dw8qa08m9qzg-0', 'ul.lst-kix_ypwe4fqorrtc-0'] as const;
-const AWARD_UL = ['ul.lst-kix_hk1kvu7fw4qk-0', 'ul.lst-kix_q18e28yjicuv-0'] as const;
-
-const SKILL_LABELS = [
-  { key: 'programmingLanguages' as const, includes: 'Programming Languages' },
-  { key: 'cloudDevOps' as const, includes: 'Cloud & DevOps' },
-  { key: 'apisDatabases' as const, includes: 'APIs/Databases' },
-  { key: 'testingDeployment' as const, includes: 'Testing & Deployment' },
-] as const;
+import BUNDLED_RESUME_TEMPLATE_HTML from './resume-template.html';
+import { getSortedUlsBySlotPrefix, SKILL_SLOT_IDS, validateResumeSlots } from './resumeSlots';
 
 export type TailorSkillsJson = {
   programmingLanguages: string;
@@ -29,6 +18,13 @@ export type TailorPointsJson = {
   skills: TailorSkillsJson;
 };
 
+const SKILL_KEY_BY_SLOT: Record<string, keyof TailorSkillsJson> = {
+  'skill-programmingLanguages': 'programmingLanguages',
+  'skill-cloudDevOps': 'cloudDevOps',
+  'skill-apisDatabases': 'apisDatabases',
+  'skill-testingDeployment': 'testingDeployment',
+};
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -41,33 +37,13 @@ function escapeComment(text: string): string {
   return text.replace(/--/g, ' ').trim();
 }
 
-export function getResumeTemplateHtml(): string {
-  return RESUME_TEMPLATE;
+/** Shipped default template (before any user save in storage). */
+export function getBundledResumeTemplateHtml(): string {
+  return BUNDLED_RESUME_TEMPLATE_HTML;
 }
 
 function parseDoc(html: string) {
-  return new DOMParser().parseFromString(html, 'text/html') as unknown as {
-    body: HTMLElement | null;
-  };
-}
-
-function findSummarySpan(body: HTMLElement): HTMLElement | null {
-  const prof = Array.from(body.querySelectorAll('p')).find((p) =>
-    (p.textContent ?? '').includes('Professional Experience')
-  );
-  if (!prof) return null;
-  let el: Element | null = prof;
-  while (el) {
-    el = el.previousElementSibling;
-    if (!el) break;
-    if (el.tagName !== 'P' || !el.classList.contains('c2') || el.classList.contains('c5')) {
-      continue;
-    }
-    const s = el.querySelector(':scope > span.c3');
-    const t = s?.textContent?.trim() ?? '';
-    if (s && t.length > 40) return s as HTMLElement;
-  }
-  return null;
+  return new DOMParser().parseFromString(html, 'text/html') as unknown as Document;
 }
 
 function listItemPlainTexts(ul: Element): string[] {
@@ -76,29 +52,20 @@ function listItemPlainTexts(ul: Element): string[] {
   );
 }
 
-function collectBySelectors(body: HTMLElement, selectors: readonly string[]): string[][] {
-  return selectors.map((sel) => {
-    const ul = body.querySelector(sel);
-    if (!ul) throw new Error(`Template missing list: ${sel}`);
-    return listItemPlainTexts(ul);
-  });
-}
-
-function extractSkills(body: HTMLElement): TailorSkillsJson {
-  const out: Record<string, string> = {};
-  for (const { key, includes } of SKILL_LABELS) {
-    let found = '';
-    for (const p of Array.from(body.querySelectorAll('p.c2'))) {
-      const lab = p.querySelector('span.c7');
-      const val = p.querySelector('span.c3');
-      if (!lab || !val) continue;
-      if (!(lab.textContent ?? '').includes(includes)) continue;
-      found = (val.textContent ?? '').replace(/^\u00a0\s*/, '').trim();
-      break;
-    }
-    out[key] = found;
+function extractSkillsFromSlots(body: HTMLElement): TailorSkillsJson {
+  const out: Partial<TailorSkillsJson> = {};
+  for (const slotId of SKILL_SLOT_IDS) {
+    const el = body.querySelector(`[data-resume-slot="${slotId}"]`);
+    const key = SKILL_KEY_BY_SLOT[slotId];
+    if (!el || !key) continue;
+    out[key] = (el.textContent ?? '').replace(/^\u00a0\s*/, '').replace(/\s+/g, ' ').trim();
   }
-  return out as TailorSkillsJson;
+  return {
+    programmingLanguages: out.programmingLanguages ?? '',
+    cloudDevOps: out.cloudDevOps ?? '',
+    apisDatabases: out.apisDatabases ?? '',
+    testingDeployment: out.testingDeployment ?? '',
+  };
 }
 
 /** Plain snapshot of editable copy (for prompts and merge fallbacks). */
@@ -107,16 +74,28 @@ export function extractTailorSnapshot(html: string): TailorPointsJson {
   const body = doc.body;
   if (!body) throw new Error('Template has no body.');
 
-  const summaryEl = findSummarySpan(body);
+  const bodyEl = body as unknown as HTMLElement;
+  const v = validateResumeSlots(bodyEl);
+  if (!v.ok) {
+    throw new Error(
+      `Invalid resume template:\n${v.errors.join('\n')}\nOpen Template builder to fix or reset.`
+    );
+  }
+
+  const summaryEl = body.querySelector('[data-resume-slot="summary"]');
   const summary = (summaryEl?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+  const experience = getSortedUlsBySlotPrefix(body, 'experience').map(listItemPlainTexts);
+  const projects = getSortedUlsBySlotPrefix(body, 'project').map(listItemPlainTexts);
+  const awards = getSortedUlsBySlotPrefix(body, 'award').map(listItemPlainTexts);
 
   return {
     company: 'Unknown',
     summary,
-    experience: collectBySelectors(body, EXP_UL),
-    projects: collectBySelectors(body, PROJ_UL),
-    awards: collectBySelectors(body, AWARD_UL),
-    skills: extractSkills(body),
+    experience,
+    projects,
+    awards,
+    skills: extractSkillsFromSlots(bodyEl),
   };
 }
 
@@ -191,15 +170,9 @@ export function parseTailorPointsFromAssistant(raw: string, base: TailorPointsJs
   const projIn = Array.isArray(obj.projects) ? obj.projects : [];
   const awardIn = Array.isArray(obj.awards) ? obj.awards : [];
 
-  const exp = base.experience.map((fb, i) =>
-    normalizeBulletArray(expIn[i], fb.length, fb)
-  );
-  const proj = base.projects.map((fb, i) =>
-    normalizeBulletArray(projIn[i], fb.length, fb)
-  );
-  const awards = base.awards.map((fb, i) =>
-    normalizeBulletArray(awardIn[i], fb.length, fb)
-  );
+  const exp = base.experience.map((fb, i) => normalizeBulletArray(expIn[i], fb.length, fb));
+  const proj = base.projects.map((fb, i) => normalizeBulletArray(projIn[i], fb.length, fb));
+  const awards = base.awards.map((fb, i) => normalizeBulletArray(awardIn[i], fb.length, fb));
 
   return {
     company: company || 'Unknown',
@@ -217,20 +190,7 @@ function setBulletList(ul: Element, texts: string[]): void {
     throw new Error(`Template bullet count mismatch: expected ${lis.length}, got ${texts.length}.`);
   }
   for (let i = 0; i < lis.length; i++) {
-    lis[i].innerHTML = `<span class="c3">${escapeHtml(texts[i] ?? '')}</span>`;
-  }
-}
-
-function setSkills(body: HTMLElement, skills: TailorSkillsJson): void {
-  for (const { key, includes } of SKILL_LABELS) {
-    for (const p of Array.from(body.querySelectorAll('p.c2'))) {
-      const lab = p.querySelector('span.c7');
-      const val = p.querySelector('span.c3');
-      if (!lab || !val) continue;
-      if (!(lab.textContent ?? '').includes(includes)) continue;
-      val.textContent = `\u00a0${skills[key]}`;
-      break;
-    }
+    lis[i].innerHTML = escapeHtml(texts[i] ?? '');
   }
 }
 
@@ -246,38 +206,43 @@ function injectCompanyHead(html: string, company: string): string {
 }
 
 /**
- * Apply tailored copy onto the fixed template HTML. Layout, classes, and CSS are unchanged.
+ * Apply tailored copy onto template HTML. Layout and CSS stay as in the file; only slotted regions change.
  */
 export function applyTailorPointsToTemplate(html: string, points: TailorPointsJson): string {
   const out = injectCompanyHead(html, points.company);
 
-  const doc = new DOMParser().parseFromString(out, 'text/html') as unknown as Document;
+  const doc = parseDoc(out);
   const body = doc.body;
   if (!body) throw new Error('Template has no body.');
 
-  const summaryEl = findSummarySpan(body);
+  const summaryEl = body.querySelector('[data-resume-slot="summary"]');
   if (summaryEl) summaryEl.textContent = points.summary;
 
-  for (let i = 0; i < EXP_UL.length; i++) {
-    const ul = body.querySelector(EXP_UL[i]);
-    if (!ul) throw new Error(`Missing ${EXP_UL[i]}`);
-    setBulletList(ul, points.experience[i] ?? []);
-  }
-  for (let i = 0; i < PROJ_UL.length; i++) {
-    const ul = body.querySelector(PROJ_UL[i]);
-    if (!ul) throw new Error(`Missing ${PROJ_UL[i]}`);
-    setBulletList(ul, points.projects[i] ?? []);
-  }
-  for (let i = 0; i < AWARD_UL.length; i++) {
-    const ul = body.querySelector(AWARD_UL[i]);
-    if (!ul) throw new Error(`Missing ${AWARD_UL[i]}`);
-    setBulletList(ul, points.awards[i] ?? []);
+  const expUls = getSortedUlsBySlotPrefix(body as unknown as HTMLElement, 'experience');
+  for (let i = 0; i < expUls.length; i++) {
+    setBulletList(expUls[i], points.experience[i] ?? []);
   }
 
-  setSkills(body, points.skills);
+  const projUls = getSortedUlsBySlotPrefix(body as unknown as HTMLElement, 'project');
+  for (let i = 0; i < projUls.length; i++) {
+    setBulletList(projUls[i], points.projects[i] ?? []);
+  }
+
+  const awardUls = getSortedUlsBySlotPrefix(body as unknown as HTMLElement, 'award');
+  for (let i = 0; i < awardUls.length; i++) {
+    setBulletList(awardUls[i], points.awards[i] ?? []);
+  }
+
+  for (const slotId of SKILL_SLOT_IDS) {
+    const el = body.querySelector(`[data-resume-slot="${slotId}"]`);
+    const key = SKILL_KEY_BY_SLOT[slotId];
+    if (el && key) el.textContent = points.skills[key];
+  }
 
   const root = doc.documentElement;
   if (!root) return out;
   const dt = out.match(/<!DOCTYPE[^>]*>/i)?.[0] ?? '';
   return `${dt}\n${root.outerHTML}`.trim();
 }
+
+export { validateResumeSlots };

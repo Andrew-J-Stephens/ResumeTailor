@@ -9,7 +9,8 @@ import {
   assertTailorReady,
   generateCoverLetterHtml,
 } from './lib/openai';
-import { getResumeTemplateHtml } from './lib/resumeTemplateApply';
+import { getBundledResumeTemplateHtml } from './lib/resumeTemplateApply';
+import { loadResumeTemplateHtml } from './lib/templateStorage';
 import type { TailorResult } from './lib/types';
 
 const MENU_ID = 'tailor-selection';
@@ -257,7 +258,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'PREVIEW_TEMPLATE') {
     void (async () => {
       try {
-        const html = getResumeTemplateHtml();
+        const html = await loadResumeTemplateHtml(getBundledResumeTemplateHtml());
         const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
         await chrome.tabs.create({ url, active: true });
         sendResponse({ ok: true as const });

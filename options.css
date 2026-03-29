@@ -229,6 +229,27 @@ body {
   transform: scale(0.99);
 }
 
+.builder-link-wrap {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.builder-link-hint {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .status {
   margin: 14px 0 0;
   min-height: 1.25em;

@@ -18,15 +18,10 @@
 
       <section class="card">
         <p class="hint">
-          Layout and styling come from the extension’s <strong>built-in resume template</strong>. The AI only adjusts wording
-          to fit the role. On a job posting, <strong>select the job description</strong> (plain text is sent—no page HTML).
-          Tailored files download as PDF
-          (<strong>CompanyName-resume-YYYY-MM-DD.pdf</strong> when the employer is known). If automatic PDF fails, a print
-          preview tab opens instead.
-        </p>
-
-        <p class="template-note">
-          To change layout or styling, edit <code>src/lib/resume-template.html</code> in the project and rebuild the extension.
+          Your resume layout comes from the <strong>template builder</strong> (or the bundled default). The AI only changes
+          slotted text to fit the job. On a posting, <strong>select the job description</strong> (plain text only—no page
+          HTML). PDFs name like <strong>CompanyName-resume-YYYY-MM-DD.pdf</strong> when the employer is known. If automatic
+          PDF fails, a print preview tab opens.
         </p>
 
         <div class="actions">
@@ -38,6 +33,8 @@
         <p id="status" class="status" data-kind="info"></p>
 
         <p class="footer">
+          <a id="open-builder" class="link" href="#">Template builder</a>
+          ·
           <a id="open-options" class="link" href="#">Extension settings</a>
         </p>
       </section>

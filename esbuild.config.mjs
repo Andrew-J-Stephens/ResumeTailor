@@ -11,7 +11,16 @@ const watch = process.argv.includes('--watch');
 mkdirSync(dist, { recursive: true });
 
 function copyStatic() {
-  for (const f of ['manifest.json', 'popup.html', 'options.html', 'print.html', 'popup.css', 'options.css']) {
+  for (const f of [
+    'manifest.json',
+    'popup.html',
+    'options.html',
+    'print.html',
+    'template-builder.html',
+    'popup.css',
+    'options.css',
+    'template-builder.css',
+  ]) {
     const src = join(root, f);
     if (existsSync(src)) {
       copyFileSync(src, join(dist, f));
@@ -40,6 +49,7 @@ async function run() {
       popup: join(root, 'src/popup.ts'),
       options: join(root, 'src/options.ts'),
       print: join(root, 'src/print.ts'),
+      'template-builder': join(root, 'src/template-builder.ts'),
     },
     outdir: dist,
     format: 'iife',
