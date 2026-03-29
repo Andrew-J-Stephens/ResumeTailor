@@ -3,18 +3,48 @@ type Provider = 'openai' | 'anthropic';
 const CUSTOM_VALUE = '__custom__';
 const MODELS_BY_PROVIDER: Record<Provider, readonly string[]> = {
   openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'],
+  /**
+   * IDs from Anthropic Claude API (aliases and dated snapshots).
+   * @see https://docs.anthropic.com/en/docs/about-claude/models
+   */
   anthropic: [
+    'claude-opus-4-6',
     'claude-sonnet-4-6',
+    'claude-haiku-4-5',
     'claude-sonnet-4-5',
-    'claude-3-5-sonnet-latest',
-    'claude-3-5-haiku-latest',
-    'claude-3-haiku-20240307',
+    'claude-opus-4-5',
+    'claude-sonnet-4-0',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022',
   ],
 };
 const DEFAULT_MODEL_BY_PROVIDER: Record<Provider, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-sonnet-4-5',
 };
+
+/** Retired or informal IDs → current API strings so saved settings keep working. */
+const ANTHROPIC_LEGACY_MODEL_IDS: Record<string, string> = {
+  'claude-3-5-sonnet-latest': 'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku-latest': 'claude-3-5-haiku-20241022',
+  'claude-sonnet-4': 'claude-sonnet-4-0',
+  'claude-opus-4': 'claude-opus-4-0',
+};
+
+const ANTHROPIC_PRESET_LABELS: Record<string, string> = {
+  'claude-opus-4-6': 'Claude Opus 4.6',
+  'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+  'claude-haiku-4-5': 'Claude Haiku 4.5 (fast, lower cost)',
+  'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+  'claude-opus-4-5': 'Claude Opus 4.5',
+  'claude-sonnet-4-0': 'Claude Sonnet 4',
+  'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet (snapshot 20241022)',
+  'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku (snapshot 20241022)',
+};
+
+function normalizeAnthropicModelId(id: string): string {
+  return ANTHROPIC_LEGACY_MODEL_IDS[id] ?? id;
+}
 
 const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
 const apiKeyEl = document.getElementById('api-key') as HTMLInputElement;
@@ -39,7 +69,7 @@ function providerApiKeyHelp(provider: Provider): string {
 
 function providerModelHint(provider: Provider): string {
   return provider === 'anthropic'
-    ? 'Includes Claude Sonnet 4.5 / 4.6 presets. If your account uses a different exact ID, choose Custom model ID.'
+    ? 'Preset IDs match Anthropic Claude API (aliases such as claude-haiku-4-5 and dated snapshots). See docs.anthropic.com models page. Use Custom for Bedrock/Vertex-only IDs.'
     : 'Includes GPT presets. You can choose Custom model ID if needed.';
 }
 
@@ -50,12 +80,7 @@ function rebuildModelOptions(provider: Provider): void {
     const option = document.createElement('option');
     option.value = m;
     if (provider === 'anthropic') {
-      if (m === 'claude-sonnet-4-6') option.textContent = 'Claude Sonnet 4.6';
-      else if (m === 'claude-sonnet-4-5') option.textContent = 'Claude Sonnet 4.5';
-      else if (m === 'claude-3-5-sonnet-latest') option.textContent = 'Claude 3.5 Sonnet (lower cost)';
-      else if (m === 'claude-3-5-haiku-latest') option.textContent = 'Claude 3.5 Haiku (low cost)';
-      else if (m === 'claude-3-haiku-20240307') option.textContent = 'Claude 3 Haiku (lowest cost)';
-      else option.textContent = m;
+      option.textContent = ANTHROPIC_PRESET_LABELS[m] ?? m;
     } else {
       if (m === 'gpt-4o-mini') option.textContent = 'GPT-4o mini (fast, lower cost)';
       else if (m === 'gpt-4o') option.textContent = 'GPT-4o';
@@ -92,9 +117,11 @@ function getModelToSave(): string {
   const provider = currentProvider();
   if (modelSelect.value === CUSTOM_VALUE) {
     const v = modelCustom.value.trim();
-    return v || DEFAULT_MODEL_BY_PROVIDER[provider];
+    const base = v || DEFAULT_MODEL_BY_PROVIDER[provider];
+    return provider === 'anthropic' ? normalizeAnthropicModelId(base) : base;
   }
-  return modelSelect.value || DEFAULT_MODEL_BY_PROVIDER[provider];
+  const v = modelSelect.value || DEFAULT_MODEL_BY_PROVIDER[provider];
+  return provider === 'anthropic' ? normalizeAnthropicModelId(v) : v;
 }
 
 function getApiKeyStorageKey(provider: Provider): string {
@@ -125,10 +152,11 @@ async function load() {
   const keyStorage = getApiKeyStorageKey(provider);
   apiKeyEl.value = typeof data[keyStorage] === 'string' ? data[keyStorage] : '';
   const modelStorage = provider === 'anthropic' ? 'anthropicModel' : 'openaiModel';
-  const saved =
+  let saved =
     typeof data[modelStorage] === 'string' && data[modelStorage]
       ? data[modelStorage]
       : DEFAULT_MODEL_BY_PROVIDER[provider];
+  if (provider === 'anthropic') saved = normalizeAnthropicModelId(saved);
   applyModelToUi(provider, saved);
 }
 
@@ -157,10 +185,11 @@ providerSelect.addEventListener('change', async () => {
       ? data[getApiKeyStorageKey(provider)]
       : '';
   const modelStorage = provider === 'anthropic' ? 'anthropicModel' : 'openaiModel';
-  const saved =
+  let saved =
     typeof data[modelStorage] === 'string' && data[modelStorage]
       ? data[modelStorage]
       : DEFAULT_MODEL_BY_PROVIDER[provider];
+  if (provider === 'anthropic') saved = normalizeAnthropicModelId(saved);
   applyModelToUi(provider, saved);
 });
 

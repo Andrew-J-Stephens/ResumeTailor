@@ -1,3 +1,4 @@
+import { sanitizeResumeCopyDashes } from './copySanitize';
 import {
   applyTailorPointsToTemplate,
   extractTailorSnapshot,
@@ -5,6 +6,8 @@ import {
   parseTailorPointsFromAssistant,
 } from './resumeTemplateApply';
 import { MAX_JOB_DESCRIPTION_CHARS } from './jobSelection';
+import type { ResumeBuilderConfig } from './resumeTemplateGenerator';
+import { SAMPLE_RESUME_BUILDER_CONFIG } from './resumeTemplateGenerator';
 import { loadResumeTemplateHtml } from './templateStorage';
 
 /** Max chars of bundled resume HTML included in the cover-letter API prompt. */
@@ -16,7 +19,7 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 type AiProvider = 'openai' | 'anthropic';
 
-type AiSettings = {
+export type AiSettings = {
   provider: AiProvider;
   apiKey: string;
   model: string;
@@ -112,7 +115,8 @@ function buildPointsUserMessage(
     '- "awards": [ [...], [...] ] — same counts as input.',
     '- "skills": { "programmingLanguages", "cloudDevOps", "apisDatabases", "testingDeployment" } — plain strings, no HTML.',
     '',
-    'Rules: Do not emit HTML. Do not change employers, role titles, dates, schools, or degree lines (fixed in the document). Mirror job keywords in bullets and skills. Plausible metrics are OK. Do not use em dashes.',
+    'Rules: Do not emit HTML. Do not change employers, role titles, dates, schools, or degree lines (fixed in the document). Mirror job keywords in bullets and skills. Plausible metrics are OK.',
+    'Do not use hyphens, en dashes, or em dashes as phrase separators; use commas, and use the word "to" for ranges when needed.',
     'Keep the same number of top-level arrays for experience, projects, and awards as in the input, and the same bullet count inside each (use empty strings only to mean “keep prior wording” for that bullet).',
   ].join('\n');
 }
@@ -236,6 +240,183 @@ async function callAiChat(
   return { content: raw, finishReason: choice?.finish_reason };
 }
 
+const MAX_TEMPLATE_IMPORT_HTML_CHARS = 24_000;
+const TEMPLATE_IMPORT_MAX_TOKENS = 8192;
+
+function normalizeListBlockFromAi(x: unknown): { titleLine: string; bullets: string[] } | null {
+  if (!x || typeof x !== 'object') return null;
+  const o = x as Record<string, unknown>;
+  const titleLine = typeof o.titleLine === 'string' ? o.titleLine.replace(/\s+/g, ' ').trim() : '';
+  if (!Array.isArray(o.bullets)) return { titleLine, bullets: [''] };
+  const bullets = o.bullets
+    .map((b) => (typeof b === 'string' ? b.replace(/\s+/g, ' ').trim() : ''))
+    .filter((b) => b.length > 0);
+  return { titleLine, bullets: bullets.length > 0 ? bullets : [''] };
+}
+
+function normalizeAiResumeBuilderConfig(parsed: unknown): ResumeBuilderConfig {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('AI did not return a JSON object for the resume import.');
+  }
+  const o = parsed as Record<string, unknown>;
+
+  const str = (key: string, fallback: string) =>
+    typeof o[key] === 'string' ? (o[key] as string).replace(/\s+/g, ' ').trim() : fallback;
+
+  let experiences: ResumeBuilderConfig['experiences'] = [];
+  if (Array.isArray(o.experiences)) {
+    for (const item of o.experiences) {
+      const b = normalizeListBlockFromAi(item);
+      if (b) experiences.push(b);
+    }
+  }
+  if (experiences.length === 0) {
+    throw new Error('AI response had no experiences. Try again or use a clearer HTML resume.');
+  }
+
+  const mapList = (key: string): ResumeBuilderConfig['projects'] => {
+    const out: ResumeBuilderConfig['projects'] = [];
+    if (!Array.isArray(o[key])) return out;
+    for (const item of o[key]) {
+      const b = normalizeListBlockFromAi(item);
+      if (b) out.push(b);
+    }
+    return out;
+  };
+
+  const projects = mapList('projects');
+  const awards = mapList('awards');
+
+  let skillsIn = o.skills;
+  const skillsBase = SAMPLE_RESUME_BUILDER_CONFIG.skills;
+  if (!skillsIn || typeof skillsIn !== 'object') skillsIn = {};
+  const sk = skillsIn as Record<string, unknown>;
+  const skillStr = (k: keyof typeof skillsBase) =>
+    typeof sk[k] === 'string' ? (sk[k] as string).replace(/\s+/g, ' ').trim() : skillsBase[k];
+
+  const raw: ResumeBuilderConfig = {
+    name: str('name', 'Your Name') || 'Your Name',
+    tagline: str('tagline', 'Role') || 'Role',
+    email: str('email', 'you@example.com') || 'you@example.com',
+    summary: str('summary', SAMPLE_RESUME_BUILDER_CONFIG.summary),
+    experiences,
+    projects,
+    awards,
+    skills: {
+      programmingLanguages: skillStr('programmingLanguages'),
+      cloudDevOps: skillStr('cloudDevOps'),
+      apisDatabases: skillStr('apisDatabases'),
+      testingDeployment: skillStr('testingDeployment'),
+    },
+  };
+
+  return {
+    ...raw,
+    email: raw.email.replace(/\s+/g, ' ').trim(),
+    name: sanitizeResumeCopyDashes(raw.name),
+    tagline: sanitizeResumeCopyDashes(raw.tagline),
+    summary: sanitizeResumeCopyDashes(raw.summary),
+    experiences: raw.experiences.map((e) => ({
+      titleLine: sanitizeResumeCopyDashes(e.titleLine),
+      bullets: e.bullets.map(sanitizeResumeCopyDashes),
+    })),
+    projects: raw.projects.map((p) => ({
+      titleLine: sanitizeResumeCopyDashes(p.titleLine),
+      bullets: p.bullets.map(sanitizeResumeCopyDashes),
+    })),
+    awards: raw.awards.map((a) => ({
+      titleLine: sanitizeResumeCopyDashes(a.titleLine),
+      bullets: a.bullets.map(sanitizeResumeCopyDashes),
+    })),
+    skills: {
+      programmingLanguages: sanitizeResumeCopyDashes(raw.skills.programmingLanguages),
+      cloudDevOps: sanitizeResumeCopyDashes(raw.skills.cloudDevOps),
+      apisDatabases: sanitizeResumeCopyDashes(raw.skills.apisDatabases),
+      testingDeployment: sanitizeResumeCopyDashes(raw.skills.testingDeployment),
+    },
+  };
+}
+
+export type ResumeImportPromptKind = 'html' | 'plain_text';
+
+/**
+ * Reads resume content (HTML or plain text from PDF) and returns fields for the template builder.
+ */
+export async function extractResumeBuilderConfigFromImportWithAi(
+  settings: AiSettings,
+  content: string,
+  contentKind: ResumeImportPromptKind
+): Promise<ResumeBuilderConfig> {
+  assertTailorReady(settings.apiKey);
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error('Resume content is empty.');
+
+  const body = trimmed.slice(0, MAX_TEMPLATE_IMPORT_HTML_CHARS);
+  const truncatedNote =
+    trimmed.length > MAX_TEMPLATE_IMPORT_HTML_CHARS
+      ? `\n\n(Note: only the first ${MAX_TEMPLATE_IMPORT_HTML_CHARS} characters were sent.)`
+      : '';
+
+  const sourceNote =
+    contentKind === 'html'
+      ? 'Input may be HTML (or HTML converted from DOCX). Ignore scripts, styles, and chrome; use visible text and structure only.'
+      : 'Input is plain text extracted from a PDF; reading order or columns may not match the printed page. Infer roles, bullets, and dates from what is readable.';
+
+  const systemContent = [
+    'You extract structured resume content for a template builder inside a browser extension.',
+    'Return a single JSON object only (no markdown fences, no commentary before or after).',
+    '',
+    'Exact JSON shape:',
+    '{',
+    '  "name": string,',
+    '  "tagline": string, one line; you may use " | " between short phrases (e.g. role | credential),',
+    '  "email": string,',
+    '  "summary": string, 2–5 sentences, plain text,',
+    '  "experiences": [ { "titleLine": string, "bullets": string[] }, ... ],',
+    '  "projects": [ { "titleLine": string, "bullets": string[] }, ... ],',
+    '  "awards": [ { "titleLine": string, "bullets": string[] }, ... ],',
+    '  "skills": {',
+    '    "programmingLanguages": string,',
+    '    "cloudDevOps": string,',
+    '    "apisDatabases": string,',
+    '    "testingDeployment": string',
+    '  }',
+    '}',
+    '',
+    'Rules:',
+    `- ${sourceNote}`,
+    '- Do not invent employers, schools, degrees, or date ranges that are not clearly supported by the document.',
+    '- At least one experience object with at least one non-empty bullet.',
+    '- titleLine for each role/project/award: one plain-text line, no HTML tags in output. Separate company, place, role, and dates with commas (not hyphens or dashes). Put the date range last using "Month YYYY to Month YYYY" or "Month YYYY to Present" (the word "to", never a dash).',
+    '- bullets: achievement lines only; strip leading bullets or punctuation used as list markers.',
+    '- In every string: no en dashes, em dashes, or spaced hyphens as separators; use commas or "to" for ranges.',
+    '- projects and awards may be empty arrays if the resume has none.',
+    '- skills: split or phrase naturally; values only (labels are fixed elsewhere).',
+  ].join('\n');
+
+  const userLabel =
+    contentKind === 'html'
+      ? 'Resume content (HTML):'
+      : 'Resume content (plain text from PDF):';
+
+  const userContent = [userLabel, body, truncatedNote].join('\n');
+
+  const out = await callAiChat(
+    settings,
+    systemContent,
+    userContent,
+    TEMPLATE_IMPORT_MAX_TOKENS,
+    0.2
+  );
+  if (out.finishReason === 'length' || out.finishReason === 'max_tokens') {
+    throw new Error(
+      'AI response was truncated. Try a shorter resume file or a model with a higher max output.'
+    );
+  }
+
+  return normalizeAiResumeBuilderConfig(parseAssistantJsonObject(out.content));
+}
+
 /**
  * Uses the bundled HTML template for layout/CSS; the model returns JSON copy only.
  * The extension applies text into the template for A4 print/save to PDF.
@@ -259,7 +440,7 @@ export async function tailorFullHtml(
       'Rewrite bullets for impact: action verb + scope + how + measurable outcome when plausible. Prefer ownership verbs (built, shipped, led, designed). Weave job-specific technologies into experience bullets where credible.',
       'Rebuild skills strings around the posting; lead with must-haves from the job text.',
       'The "company" field is the hiring employer name for filenames (or Unknown).',
-      'Do not use em dashes.',
+      'Do not use hyphens, en dashes, or em dashes as phrase separators (commas are fine; use the word "to" for ranges when needed).',
     ].join('\n'),
   };
 
@@ -328,14 +509,17 @@ function buildStandardCoverLetterHtml(draft: CoverLetterDraft): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Cover Letter - ${escapeHtml(draft.fullName)}</title>
   <style>
-    @page { size: A4; margin: 25.4mm 25.4mm; }
-    html, body { margin: 0; padding: 0; background: #fff; color: #111; }
+    @page { size: A4; margin: 1in; }
+    html, body { margin: 0; background: #fff; color: #111; }
     body {
       font-family: "Times New Roman", Times, serif;
       font-size: 12pt;
       line-height: 1.5;
-      padding: 25.4mm;
       box-sizing: border-box;
+      padding: 0;
+    }
+    @media screen {
+      body { padding: 1in; }
     }
     .doc { max-width: 680px; margin: 0 auto; }
     .date, .company, .greeting, .closing { margin: 0 0 14px; }

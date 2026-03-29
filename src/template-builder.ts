@@ -1,5 +1,11 @@
 import BUNDLED_HTML from './lib/resume-template.html';
 import {
+  assertTailorReady,
+  extractResumeBuilderConfigFromImportWithAi,
+  readSettings,
+} from './lib/openai';
+import { extractResumeFileForAiImport } from './lib/resumeFileExtract';
+import {
   buildSlottedResumeHtml,
   SAMPLE_RESUME_BUILDER_CONFIG,
   type BuilderListBlock,
@@ -17,10 +23,14 @@ const toolbarStatus = document.getElementById('toolbar-status')!;
 const htmlSource = document.getElementById('html-source') as HTMLTextAreaElement;
 const previewFrame = document.getElementById('preview-frame') as HTMLIFrameElement;
 const slotsDialog = document.getElementById('slots-dialog') as HTMLDialogElement;
+const shellEl = document.querySelector('.shell')!;
 
 const expBlocks = document.getElementById('exp-blocks')!;
 const projBlocks = document.getElementById('proj-blocks')!;
 const awardBlocks = document.getElementById('award-blocks')!;
+
+const FORM_SYNC_MS = 120;
+let formSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setToolbarStatus(text: string, kind: 'info' | 'error' | 'success' = 'info') {
   toolbarStatus.textContent = text;
@@ -37,6 +47,29 @@ function validateCurrentHtml(): { ok: boolean; errors: string[] } {
 
 function updatePreview() {
   previewFrame.srcdoc = htmlSource.value;
+}
+
+/** At least one experience slot is required for a valid template; keep preview stable if user removed all roles. */
+function normalizeConfigForLivePreview(c: ResumeBuilderConfig): ResumeBuilderConfig {
+  if (c.experiences.length > 0) return c;
+  return {
+    ...c,
+    experiences: [{ titleLine: '', bullets: [''] }],
+  };
+}
+
+function applyFormToHtmlAndPreview(): void {
+  const cfg = normalizeConfigForLivePreview(readConfigFromForm());
+  htmlSource.value = buildSlottedResumeHtml(cfg);
+  updatePreview();
+}
+
+function scheduleFormSync(): void {
+  if (formSyncTimer) clearTimeout(formSyncTimer);
+  formSyncTimer = setTimeout(() => {
+    formSyncTimer = null;
+    applyFormToHtmlAndPreview();
+  }, FORM_SYNC_MS);
 }
 
 function readListBlocks(container: HTMLElement, titleSel: string, bulletsSel: string): BuilderListBlock[] {
@@ -108,6 +141,7 @@ function appendBlock(
   }
   div.querySelector('.btn-remove')!.addEventListener('click', () => {
     div.remove();
+    scheduleFormSync();
   });
   container.appendChild(div);
 }
@@ -132,14 +166,17 @@ function populateFormFromConfig(c: ResumeBuilderConfig): void {
 
 document.getElementById('btn-add-exp')!.addEventListener('click', () => {
   appendBlock(expBlocks, 'exp', { titleLine: '', bullets: [''] });
+  scheduleFormSync();
 });
 
 document.getElementById('btn-add-proj')!.addEventListener('click', () => {
   appendBlock(projBlocks, 'proj', { titleLine: '', bullets: [''] });
+  scheduleFormSync();
 });
 
 document.getElementById('btn-add-award')!.addEventListener('click', () => {
   appendBlock(awardBlocks, 'award', { titleLine: '', bullets: [''] });
+  scheduleFormSync();
 });
 
 document.getElementById('btn-validate')!.addEventListener('click', () => {
@@ -167,7 +204,7 @@ document.getElementById('btn-save')!.addEventListener('click', async () => {
 
 document.getElementById('btn-preview')!.addEventListener('click', () => {
   updatePreview();
-  setToolbarStatus('Preview updated.', 'info');
+  setToolbarStatus('Preview refreshed from HTML editor.', 'info');
 });
 
 document.getElementById('btn-bundled')!.addEventListener('click', async () => {
@@ -196,6 +233,16 @@ document.getElementById('btn-regenerate')!.addEventListener('click', () => {
   setToolbarStatus('HTML regenerated from the form. Validate and save when ready.', 'success');
 });
 
+shellEl.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!(t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement)) return;
+  if (t.id === 'html-source') {
+    updatePreview();
+    return;
+  }
+  scheduleFormSync();
+});
+
 document.getElementById('link-options')!.addEventListener('click', (ev) => {
   ev.preventDefault();
   void chrome.runtime.openOptionsPage();
@@ -204,6 +251,37 @@ document.getElementById('link-options')!.addEventListener('click', (ev) => {
 document.getElementById('link-slots')!.addEventListener('click', (ev) => {
   ev.preventDefault();
   slotsDialog.showModal();
+});
+
+const resumeImportFile = document.getElementById('resume-import-file') as HTMLInputElement;
+resumeImportFile.addEventListener('change', async () => {
+  const file = resumeImportFile.files?.[0];
+  resumeImportFile.value = '';
+  if (!file) return;
+
+  setToolbarStatus('Reading file…');
+  try {
+    const extracted = await extractResumeFileForAiImport(file);
+    const settings = await readSettings();
+    assertTailorReady(settings.apiKey);
+    setToolbarStatus('Calling your AI model to extract fields…');
+    const config = await extractResumeBuilderConfigFromImportWithAi(
+      settings,
+      extracted.content,
+      extracted.contentKind
+    );
+    populateFormFromConfig(config);
+    htmlSource.value = buildSlottedResumeHtml(config);
+    updatePreview();
+    setToolbarStatus(`Imported “${extracted.fileLabel}” via AI. Review fields, validate, then save if needed.`, 'success');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/api key|Add your API key/i.test(msg)) {
+      setToolbarStatus(`${msg} Open extension settings to add your key.`, 'error');
+    } else {
+      setToolbarStatus(msg, 'error');
+    }
+  }
 });
 
 void (async () => {

@@ -1,4 +1,5 @@
 import { DOMParser } from 'linkedom';
+import { sanitizeResumeCopyDashes } from './copySanitize';
 import BUNDLED_RESUME_TEMPLATE_HTML from './resume-template.html';
 import { getSortedUlsBySlotPrefix, SKILL_SLOT_IDS, validateResumeSlots } from './resumeSlots';
 
@@ -174,13 +175,20 @@ export function parseTailorPointsFromAssistant(raw: string, base: TailorPointsJs
   const proj = base.projects.map((fb, i) => normalizeBulletArray(projIn[i], fb.length, fb));
   const awards = base.awards.map((fb, i) => normalizeBulletArray(awardIn[i], fb.length, fb));
 
+  const skills = normalizeSkills(obj.skills, base.skills);
+
   return {
-    company: company || 'Unknown',
-    summary: summary.length > 0 ? summary : base.summary,
-    experience: exp,
-    projects: proj,
-    awards,
-    skills: normalizeSkills(obj.skills, base.skills),
+    company: sanitizeResumeCopyDashes(company || 'Unknown'),
+    summary: sanitizeResumeCopyDashes(summary.length > 0 ? summary : base.summary),
+    experience: exp.map((row) => row.map(sanitizeResumeCopyDashes)),
+    projects: proj.map((row) => row.map(sanitizeResumeCopyDashes)),
+    awards: awards.map((row) => row.map(sanitizeResumeCopyDashes)),
+    skills: {
+      programmingLanguages: sanitizeResumeCopyDashes(skills.programmingLanguages),
+      cloudDevOps: sanitizeResumeCopyDashes(skills.cloudDevOps),
+      apisDatabases: sanitizeResumeCopyDashes(skills.apisDatabases),
+      testingDeployment: sanitizeResumeCopyDashes(skills.testingDeployment),
+    },
   };
 }
 

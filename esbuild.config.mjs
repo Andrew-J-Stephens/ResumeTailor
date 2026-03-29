@@ -26,6 +26,10 @@ function copyStatic() {
       copyFileSync(src, join(dist, f));
     }
   }
+  const pdfWorker = join(root, 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs');
+  if (existsSync(pdfWorker)) {
+    copyFileSync(pdfWorker, join(dist, 'pdf.worker.min.mjs'));
+  }
 }
 
 const base = {

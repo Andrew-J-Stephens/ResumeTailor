@@ -21,7 +21,7 @@ const RESUME_DOWNLOAD_BASENAME = 'resume.html';
 function addA4PrintCss(html: string): string {
   const printCss = `
 <style id="resume-tailor-print-a4">
-@page { size: A4; margin: 25.4mm 25.4mm; }
+@page { size: A4; margin: 1in; }
 html, body {
   margin: 0 !important;
   padding: 0 !important;

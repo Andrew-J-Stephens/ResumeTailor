@@ -17,93 +17,124 @@
       </header>
 
       <p class="lead">
-        The tailor updates only elements marked with <code>data-resume-slot</code>. Use the visual form to generate a valid
-        template, edit the HTML if you like, validate, then <strong>Save as my template</strong>. Tailoring always uses your
-        saved template when present; otherwise the bundled default.
+        The tailor updates only elements marked with <code>data-resume-slot</code>. The <strong>live preview</strong> (left)
+        updates as you edit the fields on the right—same formatting as <strong>Regenerate HTML from form</strong>. You can
+        still edit raw HTML below the form; typing there refreshes the preview only.
+        <strong>Import resume</strong> accepts <strong>HTML, PDF, or DOCX</strong>. The file is read in your browser; only the
+        extracted text/HTML is sent to your AI model (same API key as tailoring) to fill fields. PDFs need selectable text.
+        Validate, then <strong>Save as my template</strong>.
+        Tailoring uses your saved template when present; otherwise the bundled default.
       </p>
 
       <div class="toolbar">
+        <label class="btn-toolbar-upload">
+          <input
+            id="resume-import-file"
+            type="file"
+            accept=".html,.htm,.pdf,.docx,text/html,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            class="sr-only"
+          />
+          <span class="btn-upload-pseudo" tabindex="0">Import resume (HTML, PDF, DOCX)</span>
+        </label>
         <button type="button" class="btn-primary" id="btn-validate">Validate</button>
         <button type="button" class="btn-primary" id="btn-save">Save as my template</button>
-        <button type="button" class="btn-secondary" id="btn-preview">Update preview</button>
+        <button type="button" class="btn-secondary" id="btn-preview">Refresh preview from HTML</button>
         <button type="button" class="btn-secondary" id="btn-bundled">Reset to bundled default</button>
         <button type="button" class="btn-secondary" id="btn-clear">Clear saved template</button>
       </div>
       <p id="toolbar-status" class="toolbar-status" role="status"></p>
 
-      <section class="card">
-        <h2 class="card-title">Visual builder</h2>
-        <p class="hint">Use <code>|</code> in a line field for a line break. Bullets: one per line in each textarea.</p>
+      <div class="builder-layout">
+        <aside class="builder-preview-col" aria-label="Resume preview">
+          <section class="card card-preview" aria-labelledby="preview-heading">
+            <h2 id="preview-heading" class="card-title">Live preview</h2>
+            <p class="hint preview-hint">
+              Preview is a scaled A4 page (not squeezed): <code>|</code> is a line break; put the date range at the end of a
+              role/project line to right align it. Raw HTML edits update the preview only.
+            </p>
+            <div class="preview-wrap">
+              <div class="preview-viewport">
+                <iframe id="preview-frame" class="preview-frame" title="Resume preview"></iframe>
+              </div>
+            </div>
+          </section>
+        </aside>
 
-        <div class="field-grid">
-          <label class="field">
-            <span class="field-label">Name</span>
-            <input type="text" id="f-name" class="field-input" autocomplete="name" />
-          </label>
-          <label class="field">
-            <span class="field-label">Tagline</span>
-            <input type="text" id="f-tagline" class="field-input" placeholder="Role | Credential" />
-          </label>
-          <label class="field field-span-2">
-            <span class="field-label">Email</span>
-            <input type="email" id="f-email" class="field-input" autocomplete="email" />
-          </label>
-          <label class="field field-span-2">
-            <span class="field-label">Summary (AI rewrites this per job)</span>
-            <textarea id="f-summary" class="field-input field-textarea" rows="4"></textarea>
-          </label>
+        <div class="builder-main-col">
+          <section class="card">
+            <h2 class="card-title">Visual builder</h2>
+            <p class="hint">Use <code>|</code> in a line field for a line break. Bullets: one per line in each textarea.</p>
+
+            <div class="field-grid">
+              <label class="field">
+                <span class="field-label">Name</span>
+                <input type="text" id="f-name" class="field-input" autocomplete="name" />
+              </label>
+              <label class="field">
+                <span class="field-label">Tagline</span>
+                <input type="text" id="f-tagline" class="field-input" placeholder="Role | Credential" />
+              </label>
+              <label class="field field-span-2">
+                <span class="field-label">Email</span>
+                <input type="email" id="f-email" class="field-input" autocomplete="email" />
+              </label>
+              <label class="field field-span-2">
+                <span class="field-label">Summary (AI rewrites this per job)</span>
+                <textarea id="f-summary" class="field-input field-textarea" rows="4"></textarea>
+              </label>
+            </div>
+
+            <h3 class="subsection-title">Experience</h3>
+            <p class="subsection-hint">
+              End each role line with dates (e.g. <code>…Acme, Engineer May 2023 to Present</code>) so they align right in the
+              preview. Prefer commas between company, place, and title; avoid dashes as separators.
+            </p>
+            <div id="exp-blocks" class="blocks"></div>
+            <button type="button" class="btn-small" id="btn-add-exp">Add role</button>
+
+            <h3 class="subsection-title">Projects</h3>
+            <div id="proj-blocks" class="blocks"></div>
+            <button type="button" class="btn-small" id="btn-add-proj">Add project</button>
+
+            <h3 class="subsection-title">Awards</h3>
+            <div id="award-blocks" class="blocks"></div>
+            <button type="button" class="btn-small" id="btn-add-award">Add award</button>
+
+            <h3 class="subsection-title">Skills (values only; labels are fixed for the AI)</h3>
+            <div class="field-grid">
+              <label class="field field-span-2">
+                <span class="field-label">Programming languages</span>
+                <input type="text" id="f-skill-pl" class="field-input" />
+              </label>
+              <label class="field field-span-2">
+                <span class="field-label">Cloud &amp; DevOps</span>
+                <input type="text" id="f-skill-cd" class="field-input" />
+              </label>
+              <label class="field field-span-2">
+                <span class="field-label">APIs / databases</span>
+                <input type="text" id="f-skill-ad" class="field-input" />
+              </label>
+              <label class="field field-span-2">
+                <span class="field-label">Testing &amp; deployment</span>
+                <input type="text" id="f-skill-td" class="field-input" />
+              </label>
+            </div>
+
+            <button type="button" class="btn-primary btn-regen" id="btn-regenerate">Regenerate HTML from form</button>
+          </section>
+
+          <section class="card" id="html-section">
+            <h2 class="card-title">HTML</h2>
+            <textarea id="html-source" class="html-editor" spellcheck="false"></textarea>
+          </section>
+
+          <p class="footer">
+            <a class="link" id="link-options" href="#">Extension settings</a>
+            ·
+            <a class="link" id="link-slots" href="#">Required slots (reference)</a>
+          </p>
         </div>
-
-        <h3 class="subsection-title">Experience</h3>
-        <div id="exp-blocks" class="blocks"></div>
-        <button type="button" class="btn-small" id="btn-add-exp">Add role</button>
-
-        <h3 class="subsection-title">Projects</h3>
-        <div id="proj-blocks" class="blocks"></div>
-        <button type="button" class="btn-small" id="btn-add-proj">Add project</button>
-
-        <h3 class="subsection-title">Awards</h3>
-        <div id="award-blocks" class="blocks"></div>
-        <button type="button" class="btn-small" id="btn-add-award">Add award</button>
-
-        <h3 class="subsection-title">Skills (values only; labels are fixed for the AI)</h3>
-        <div class="field-grid">
-          <label class="field field-span-2">
-            <span class="field-label">Programming languages</span>
-            <input type="text" id="f-skill-pl" class="field-input" />
-          </label>
-          <label class="field field-span-2">
-            <span class="field-label">Cloud &amp; DevOps</span>
-            <input type="text" id="f-skill-cd" class="field-input" />
-          </label>
-          <label class="field field-span-2">
-            <span class="field-label">APIs / databases</span>
-            <input type="text" id="f-skill-ad" class="field-input" />
-          </label>
-          <label class="field field-span-2">
-            <span class="field-label">Testing &amp; deployment</span>
-            <input type="text" id="f-skill-td" class="field-input" />
-          </label>
-        </div>
-
-        <button type="button" class="btn-primary btn-regen" id="btn-regenerate">Regenerate HTML from form</button>
-      </section>
-
-      <section class="card">
-        <h2 class="card-title">HTML</h2>
-        <textarea id="html-source" class="html-editor" spellcheck="false"></textarea>
-      </section>
-
-      <section class="card">
-        <h2 class="card-title">Preview</h2>
-        <iframe id="preview-frame" class="preview-frame" title="Resume preview"></iframe>
-      </section>
-
-      <p class="footer">
-        <a class="link" id="link-options" href="#">Extension settings</a>
-        ·
-        <a class="link" id="link-slots" href="#">Required slots (reference)</a>
-      </p>
+      </div>
       <dialog id="slots-dialog" class="slots-dialog">
         <form method="dialog">
           <h3>Required <code>data-resume-slot</code> values</h3>
