@@ -5,9 +5,8 @@ import {
   parseTailorPointsFromAssistant,
 } from './resumeTemplateApply';
 import { MAX_JOB_DESCRIPTION_CHARS } from './jobSelection';
-import type { StoredResume } from './types';
 
-/** Max chars of uploaded resume HTML included in the API prompt (trim tokens vs full file). */
+/** Max chars of bundled resume HTML included in the cover-letter API prompt. */
 const MAX_RESUME_HTML_CHARS = 24_000;
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
@@ -357,14 +356,14 @@ function buildStandardCoverLetterHtml(draft: CoverLetterDraft): string {
 
 export async function generateCoverLetterHtml(
   settings: AiSettings,
-  jobDescription: string,
-  originalResumeHtml: string
+  jobDescription: string
 ): Promise<string> {
+  const originalResumeHtml = getResumeTemplateHtml();
   const system: ChatMessage = {
     role: 'system',
     content: [
       'You are an expert cover letter writer.',
-      'Given a job description and resume HTML, produce JSON only with this exact schema:',
+      'Given a job description and the candidate resume (HTML excerpt below), produce JSON only with this exact schema:',
       '{"fullName":"...","targetRole":"...","company":"...","greeting":"...","paragraphs":["...","...","..."],"closingLine":"..."}',
       'Rules:',
       '- 3 paragraphs in "paragraphs", each 2-4 sentences.',
@@ -445,23 +444,6 @@ export async function readSettings(): Promise<AiSettings> {
   };
 }
 
-function isHtmlResume(meta: StoredResume): boolean {
-  const m = (meta.mimeType ?? '').toLowerCase();
-  if (m === 'text/html' || m === 'application/xhtml+xml') return true;
-  if (m === '' || m === 'application/octet-stream') {
-    return /\.html?$/i.test(meta.fileName);
-  }
-  return false;
-}
-
 export function assertTailorReady(apiKey: string): void {
-  if (!apiKey.trim()) throw new Error('Add your API key in extension options.');
-}
-
-export function assertReady(meta: StoredResume | undefined, apiKey: string): void {
-  if (!meta) throw new Error('No resume on file. Upload an HTML file in the popup.');
-  if (!isHtmlResume(meta)) {
-    throw new Error('Upload a .html or .htm resume. Output opens as tailored A4 PDF print preview.');
-  }
-  if (!apiKey.trim()) throw new Error('Add your API key in extension options.');
+  if (!apiKey.trim()) throw new Error('Add your API key in extension settings.');
 }

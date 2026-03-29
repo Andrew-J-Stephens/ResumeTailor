@@ -2,24 +2,20 @@ import {
   buildTailoredDownloadFilename,
   buildCoverLetterDownloadFilename,
 } from './lib/companyFilename';
-import { getResumeBlob, deleteResume } from './lib/db';
 import { normalizeJobDescriptionFromPage } from './lib/jobSelection';
 import {
   tailorFullHtml,
   readSettings,
-  assertReady,
   assertTailorReady,
   generateCoverLetterHtml,
 } from './lib/openai';
-import type { StoredResume, TailorResult } from './lib/types';
+import { getResumeTemplateHtml } from './lib/resumeTemplateApply';
+import type { TailorResult } from './lib/types';
 
 const MENU_ID = 'tailor-selection';
 const PRINT_JOB_PREFIX = 'printJob:';
 
-async function getCurrentResumeMeta(): Promise<StoredResume | undefined> {
-  const { currentResume } = await chrome.storage.local.get('currentResume');
-  return currentResume as StoredResume | undefined;
-}
+const RESUME_DOWNLOAD_BASENAME = 'resume.html';
 
 function addA4PrintCss(html: string): string {
   const printCss = `
@@ -151,16 +147,11 @@ async function runTailor(jobDescription: string): Promise<TailorResult> {
 
     const settings = await readSettings();
     assertTailorReady(settings.apiKey);
-    const meta = await getCurrentResumeMeta();
 
-    const tailoredHtml = await tailorFullHtml(
-      settings,
-      job,
-      meta?.fileName ?? 'resume.html'
-    );
+    const tailoredHtml = await tailorFullHtml(settings, job, RESUME_DOWNLOAD_BASENAME);
 
     const { html: finalHtml, fileName } = buildTailoredDownloadFilename(
-      meta!.fileName,
+      RESUME_DOWNLOAD_BASENAME,
       job,
       tailoredHtml,
       'pdf'
@@ -191,25 +182,10 @@ async function runCoverLetter(jobDescription: string): Promise<TailorResult> {
     }
 
     const settings = await readSettings();
-    const meta = await getCurrentResumeMeta();
-    assertReady(meta, settings.apiKey);
+    assertTailorReady(settings.apiKey);
 
-    const blob = await getResumeBlob(meta!.id);
-    if (!blob) {
-      return { ok: false, error: 'Resume file missing from storage. Upload again.' };
-    }
-
-    const originalHtml = await blob.text();
-    if (!originalHtml.trim()) {
-      return { ok: false, error: 'Stored HTML resume is empty.' };
-    }
-
-    const coverLetterHtml = await generateCoverLetterHtml(
-      settings,
-      job,
-      originalHtml
-    );
-    const fileName = buildCoverLetterDownloadFilename(meta!.fileName, job, 'pdf');
+    const coverLetterHtml = await generateCoverLetterHtml(settings, job);
+    const fileName = buildCoverLetterDownloadFilename(RESUME_DOWNLOAD_BASENAME, job, 'pdf');
     try {
       await downloadPdfFromHtmlViaCdp(coverLetterHtml, fileName);
     } catch (e) {
@@ -229,7 +205,7 @@ async function runCoverLetter(jobDescription: string): Promise<TailorResult> {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: MENU_ID,
-    title: 'Tailor resume to this selection',
+    title: 'Tailor resume to selection',
     contexts: ['selection'],
   });
 });
@@ -278,17 +254,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === 'GET_CURRENT_RESUME') {
-    void getCurrentResumeMeta().then((meta) => sendResponse({ meta }));
-    return true;
-  }
-
-  if (message?.type === 'CLEAR_RESUME') {
+  if (message?.type === 'PREVIEW_TEMPLATE') {
     void (async () => {
-      const prev = await getCurrentResumeMeta();
-      if (prev) await deleteResume(prev.id);
-      await chrome.storage.local.remove(['currentResume']);
-      sendResponse({ ok: true });
+      try {
+        const html = getResumeTemplateHtml();
+        const url = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+        await chrome.tabs.create({ url, active: true });
+        sendResponse({ ok: true as const });
+      } catch (e) {
+        sendResponse({
+          ok: false as const,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
     })();
     return true;
   }
